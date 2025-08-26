@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./errors/KipuBankErrors.sol";
-import "./events/KipuBankEvents.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { KipuBankErrors } from "./errors/KipuBankErrors.sol";
+import { KipuBankEvents } from "./events/KipuBankEvents.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract KipuBank is ReentrancyGuard {
   /**
@@ -61,7 +61,7 @@ contract KipuBank is ReentrancyGuard {
    * @param amount The amount to withdraw. 
    */
   function withdraw(uint256 amount) public nonReentrant {
-    if (amount >= MAX_SINGLE_WITHDRAW_LIMIT) {
+    if (amount > MAX_SINGLE_WITHDRAW_LIMIT) {
       revert KipuBankErrors.WithdrawLimitExceededError(msg.sender, MAX_SINGLE_WITHDRAW_LIMIT);
     }
 
@@ -78,6 +78,21 @@ contract KipuBank is ReentrancyGuard {
 
     _updateWithdrawValues(msg.sender, amount);
     emit KipuBankEvents.WithdrawSuccess(msg.sender, amount);
+  }
+
+  /**
+   * Get funds stored in vault for a given address.
+   * @param addr The address to check the funds for.
+   */
+  function getFundsForAddress(address addr) external view returns (uint256) {
+    return _vault[addr];
+  }
+
+  /**
+   * Get total value in this contract.
+   */
+  function getTotalValue() external view returns (uint256) {
+    return _bankValue;
   }
 
   /**

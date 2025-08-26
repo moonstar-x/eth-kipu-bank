@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "hardhat build",
+    "test": "hardhat test",
+    "test:solidity": "hardhat test solidity",
+    "test:ts": "hardhat test nodejs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
+  },
+  "engines": {
+    "node": ">= 22.10"
   },
   "devDependencies": {
     "@moonstar-x/eslint-config": "^1.0.0",

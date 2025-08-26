@@ -1,0 +1,9 @@
+{
+  "extends": [
+    "@moonstar-x/eslint-config/rules/typescript",
+    "@moonstar-x/eslint-config/rules/node"
+  ],
+  "parserOptions": {
+    "warnOnUnsupportedTypeScriptVersion": false
+  }
+}

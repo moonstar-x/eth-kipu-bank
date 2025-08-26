@@ -1,13 +1,40 @@
-/* Based on https://github.com/tsconfig/bases/blob/501da2bcd640cf95c95805783e1012b992338f28/bases/node22.json */
 {
+  "compileOnSave": true,
+
   "compilerOptions": {
-    "lib": ["es2023"],
-    "module": "node16",
     "target": "es2022",
+    "module": "node16",
+
+    "allowJs": false,
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "dist",
+    "resolveJsonModule": true,
+
     "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "useUnknownInCatchVariables": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+
+    "sourceMap": true,
+    "emitDeclarationOnly": false,
     "moduleResolution": "node16",
-    "outDir": "dist"
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "lib": ["es2023"],
   }
 }

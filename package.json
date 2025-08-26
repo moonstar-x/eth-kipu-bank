@@ -2,10 +2,17 @@
   "name": "eth-kipu-bank",
   "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
   "devDependencies": {
+    "@moonstar-x/eslint-config": "^1.0.0",
+    "@moonstar-x/logger": "^1.0.1",
     "@nomicfoundation/hardhat-ignition": "^3.0.0",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
     "@types/node": "^22.18.0",
+    "eslint": "^8.57.1",
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.0.1",
     "typescript": "~5.8.0",

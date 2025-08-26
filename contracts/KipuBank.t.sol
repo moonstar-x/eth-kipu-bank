@@ -54,7 +54,7 @@ contract KipuBankTest is Test {
   }
 
   function test_WithdrawShouldTransferAmountToSender() public {
-    vm.expectCall(address(bank), abi.encodeCall(bank.deposit, ()));
+    vm.expectCall(address(bank), abi.encodeCall(bank.withdraw, (5)));
     bank.deposit{ value: 10 }();
     bank.withdraw(5);
   }
@@ -64,7 +64,7 @@ contract KipuBankTest is Test {
     uint initialAmount = 25;
     uint withdrawnAmount = 10;
 
-    vm.expectCall(address(bank), abi.encodeCall(bank.deposit, ()));
+    vm.expectCall(address(bank), abi.encodeCall(bank.withdraw, (withdrawnAmount)));
 
     bank.deposit{ value: initialAmount }();
 

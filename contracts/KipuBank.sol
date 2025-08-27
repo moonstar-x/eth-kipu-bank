@@ -65,14 +65,14 @@ contract KipuBank is ReentrancyGuard {
       revert KipuBankErrors.InsufficientFundsError(msg.sender, funds, amount);
     }
 
+    _updateWithdrawValues(msg.sender, amount);
+    emit KipuBankEvents.WithdrawSuccess(msg.sender, amount);
+
     address payable payableSender = payable(msg.sender);
     (bool success, ) = payableSender.call{ value: amount }("");
     if (!success) {
       revert KipuBankErrors.TransferError();
     }
-
-    _updateWithdrawValues(msg.sender, amount);
-    emit KipuBankEvents.WithdrawSuccess(msg.sender, amount);
   }
 
   /**
@@ -80,6 +80,14 @@ contract KipuBank is ReentrancyGuard {
    */
   function getBalance() public view returns (uint256) {
     return address(this).balance;
+  }
+
+
+  /**
+   * Get balance for the sender.
+   */
+  function getMyFunds() external view returns (uint256) {
+    return _vault[msg.sender];
   }
 
   /**
@@ -118,5 +126,9 @@ contract KipuBank is ReentrancyGuard {
   function _updateWithdrawValues(address addr, uint256 amount) private {
     _vault[addr] -= amount;
     _withdrawCount++;
+  }
+
+  receive() external payable {
+    deposit();
   }
 }

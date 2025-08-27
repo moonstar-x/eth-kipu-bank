@@ -88,6 +88,16 @@ contract KipuBankTest is Test {
     bank.withdraw(5);
   }
 
+  function test_GetMyFundsShouldReturnUserFunds() public {
+    vm.assertEq(bank.getMyFunds(), 0, "My funds should initialized at 0.");
+
+    bank.deposit{ value: 10 }();
+    vm.assertEq(bank.getMyFunds(), 10, "My funds should be updated after deposit.");
+
+    bank.withdraw(5);
+    vm.assertEq(bank.getMyFunds(), 5, "My funds should be updated after withdraw.");
+  }
+
   receive() external payable {
 
   }

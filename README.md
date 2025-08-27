@@ -88,6 +88,14 @@ npm run verify:sepolia
 
 This will verify the contract on Etherscan.
 
-## Deployed Contract
+## Interacting with the Contract
 
-This contract has been deployed and verified at the following address: [0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9](https://sepolia.etherscan.io/address/0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9#code).
+This contract has been deployed and verified at the following address: [0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9](https://sepolia.etherscan.io/address/0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9#code)
+
+First, head over to the Etherscan page of the contract and copy the ABI content.
+
+Next, head over to the [Remix IDE](https://remix.ethereum.org/) and paste the ABI content into a `.abi` file with any name and leave this file open in the editor.
+
+In the `Deploy & Run Transactions` page, `Injected Provider - MetaMask` in the Environment option and connect your wallet, **make sure to enable only the Sepolia network** when granting access.
+
+Next, in the `At Address` textbox insert the contract's address and click the `At Address` button. You will receive a modal asking whether to load the contract with the ABI specification loaded, click `Accept` and you'll now have some buttons to interact with the contract.

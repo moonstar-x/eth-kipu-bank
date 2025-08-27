@@ -9,7 +9,8 @@
     "test:ts": "hardhat test nodejs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "deploy:sepolia": "hardhat ignition deploy ignition/modules/KipuBank.ts --network sepolia"
+    "deploy:sepolia": "hardhat ignition deploy ignition/modules/KipuBank.ts --network sepolia",
+    "verify:sepolia": "hardhat run --build-profile production --network sepolia scripts/verify.ts"
   },
   "engines": {
     "node": ">= 22.10"
@@ -19,6 +20,7 @@
     "@moonstar-x/logger": "^1.0.1",
     "@nomicfoundation/hardhat-ignition": "^3.0.0",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^3.0.0",
     "@types/node": "^22.18.0",
     "dotenv": "^17.2.1",
     "eslint": "^8.57.1",

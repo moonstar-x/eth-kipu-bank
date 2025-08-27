@@ -1,12 +1,10 @@
-import 'dotenv/config';
 import { HardhatUserConfig } from 'hardhat/config';
 import hardhatToolboxViemPlugin from '@nomicfoundation/hardhat-toolbox-viem';
-
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL!;
-const SEPOLIA_PRIVATE_KEY = process.env.SEPOLIA_PRIVATE_KEY!;
+import hardhatVerify from '@nomicfoundation/hardhat-verify';
+import { SEPOLIA_RPC_URL, SEPOLIA_PRIVATE_KEY, ETHERSCAN_API_KEY } from './config/env';
 
 const config: HardhatUserConfig = {
-  plugins: [hardhatToolboxViemPlugin],
+  plugins: [hardhatToolboxViemPlugin, hardhatVerify],
   solidity: {
     profiles: {
       default: {
@@ -37,6 +35,11 @@ const config: HardhatUserConfig = {
       chainType: 'l1',
       url: SEPOLIA_RPC_URL,
       accounts: [SEPOLIA_PRIVATE_KEY]
+    }
+  },
+  verify: {
+    etherscan: {
+      apiKey: ETHERSCAN_API_KEY
     }
   }
 };

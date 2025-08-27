@@ -1,9 +1,12 @@
 {
+  "include": ["./**/*"],
+  "exclude": ["node_modules", "artifacts", "cache"],
+
   "compileOnSave": true,
 
   "compilerOptions": {
     "target": "es2022",
-    "module": "node16",
+    "module": "es2015",
 
     "allowJs": false,
     "declaration": false,
@@ -28,7 +31,7 @@
 
     "sourceMap": true,
     "emitDeclarationOnly": false,
-    "moduleResolution": "node16",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
 

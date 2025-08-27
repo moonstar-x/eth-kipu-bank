@@ -1,57 +1,93 @@
-# Sample Hardhat 3 Beta Project (`node:test` and `viem`)
+# KipuBank
 
-This project showcases a Hardhat 3 Beta project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+This repository contains a simple contract as a proposed solution for the KipuBank module activity from the Blockchain course provided by [ETH Kipu](https://www.ethkipu.org).
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Requirements
 
-## Project Overview
+In order to develop for this repository you will need the following:
 
-This example project includes:
+- [Node.js v22.18 or higher](https://nodejs.org)
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+You will also need an account in [MetaMask](https://metamask.io), [Alchemy](https://www.alchemy.com), and [Etherscan](https://etherscan.io).
 
-## Usage
+## Setting Up
 
-### Running Tests
+First, clone this repository:
 
-To run all the tests in the project, execute the following command:
-
-```shell
-npx hardhat test
+```bash
+git clone https://github.com/moonstar-x/eth-kipu-bank
 ```
 
-You can also selectively run the Solidity or `node:test` tests:
+And install the dependencies:
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
+```bash
+npm install
 ```
 
-### Make a deployment to Sepolia
+## Testing
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+To run unit tests for this project, run the following command:
 
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+```bash
+npm run test
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+You may also run tests in Solidity only with:
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+```bash
+npm run test:solidity
 ```
 
-After setting the variable, you can run the deployment with the Sepolia network:
+Or only in Node.js with:
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
+```bash
+npm run test:ts
 ```
+
+## Linting
+
+To run the linter, use:
+
+```bash
+npm run lint
+```
+
+And to auto-fix issues, use:
+
+```bash
+npm run lint:fix
+```
+
+## Deploying
+
+Follow these steps to deploy and verify this contract.
+
+First, copy the `.env.sample` file into a `.env` file and fill out the values as necessary.
+
+Both `KIPU_BANK_CAP` and `KIPU_BANK_MAX_SINGLE_WITHDRAW_LIMIT` are the contract's constructor arguments and represent contract's balance cap and max limit for a single withdrawal request respectively.
+
+As for the next variables:
+
+- `SEPOLIA_RPC_URL` should be set to the RPC URL to deploy this contract to. For more information on how to get this value feel free to check [this guide from the Alchemy's documentation page](https://www.alchemy.com/docs/how-to-deploy-a-smart-contract-to-the-sepolia-testnet).
+- `SEPOLIA_PRIVATE_KEY` should be set to your MetaMask's private key. For more information on how to get this value feel free to check [this guide on MetaMask's documentation page](https://www.google.com/search?client=safari&rls=en&q=metamask+private+key&ie=UTF-8&oe=UTF-8).
+- `ETHERSCAN_API_KEY` should be set to your Etherscan's API key. For more information on how to get this value feel free to check [this guide on Etherscan's documentation page](https://docs.etherscan.io/getting-started/viewing-api-usage-statistics).
+
+Once you have your `.env` file ready, you're ready to deploy the contract by running the following command:
+
+```bash
+npm run deploy:sepolia
+```
+
+This will deploy the contract to the Sepolia testnet and will give you a contract address.
+
+Once this is done, you can verify the contract with:
+
+```bash
+npm run verify:sepolia
+```
+
+This will verify the contract on Etherscan.
+
+## Deployed Contract
+
+This contract has been deployed and verified at the following address: [0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9](https://sepolia.etherscan.io/address/0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9#code).

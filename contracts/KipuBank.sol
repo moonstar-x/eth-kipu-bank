@@ -22,11 +22,6 @@ contract KipuBank is ReentrancyGuard {
   mapping(address => uint256) private _vault;
 
   /**
-   * Value that tracks the entire amount stored in the contract.
-   */
-  uint256 private _bankValue = 0;
-
-  /**
    * Counter for each successful deposit.
    */
   uint256 private _depositCount = 0;
@@ -47,7 +42,7 @@ contract KipuBank is ReentrancyGuard {
    * Deposits the value in the address' vault.
    */
   function deposit() public payable {
-    uint256 potentialBankValue = _bankValue + msg.value;
+    uint256 potentialBankValue = getBalance() + msg.value;
     if (potentialBankValue > BANK_CAP) {
       revert KipuBankErrors.BankCapReachedError();
     }
@@ -81,18 +76,18 @@ contract KipuBank is ReentrancyGuard {
   }
 
   /**
+   * Get balance in this contract.
+   */
+  function getBalance() public view returns (uint256) {
+    return address(this).balance;
+  }
+
+  /**
    * Get funds stored in vault for a given address.
    * @param addr The address to check the funds for.
    */
   function getFundsForAddress(address addr) external view returns (uint256) {
     return _vault[addr];
-  }
-
-  /**
-   * Get total value in this contract.
-   */
-  function getTotalValue() external view returns (uint256) {
-    return _bankValue;
   }
 
   /**
@@ -114,7 +109,6 @@ contract KipuBank is ReentrancyGuard {
    */
   function _updateDepositValues(address addr, uint256 amount) private {
     _vault[addr] += amount;
-    _bankValue += amount;
     _depositCount++;
   }
 
@@ -123,7 +117,6 @@ contract KipuBank is ReentrancyGuard {
    */
   function _updateWithdrawValues(address addr, uint256 amount) private {
     _vault[addr] -= amount;
-    _bankValue -= amount;
     _withdrawCount++;
   }
 }

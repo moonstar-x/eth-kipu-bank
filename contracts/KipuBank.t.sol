@@ -26,13 +26,13 @@ contract KipuBankTest is Test {
     uint amount = 25;
 
     vm.assertEq(bank.getFundsForAddress(addr), 0, "Funds should start at 0.");
-    vm.assertEq(bank.getTotalValue(), 0, "Bank should start at 0.");
+    vm.assertEq(bank.getBalance(), 0, "Bank should start at 0.");
     vm.assertEq(bank.getDepositCount(), 0, "Deposit count should start at 0.");
 
     bank.deposit{ value: amount }();
 
     vm.assertEq(bank.getFundsForAddress(addr), amount, "Funds should be updated.");
-    vm.assertEq(bank.getTotalValue(), amount, "Bank should be updated.");
+    vm.assertEq(bank.getBalance(), amount, "Bank should be updated.");
     vm.assertEq(bank.getDepositCount(), 1, "Deposit count be at 1.");
   }
 
@@ -69,13 +69,13 @@ contract KipuBankTest is Test {
     bank.deposit{ value: initialAmount }();
 
     vm.assertEq(bank.getFundsForAddress(addr), initialAmount, "Funds should start at initial amount.");
-    vm.assertEq(bank.getTotalValue(), initialAmount, "Bank should start at initial amount.");
+    vm.assertEq(bank.getBalance(), initialAmount, "Bank should start at initial amount.");
     vm.assertEq(bank.getWithdrawCount(), 0, "Withdraw count should start at 0.");
 
     bank.withdraw(withdrawnAmount);
 
     vm.assertEq(bank.getFundsForAddress(addr), initialAmount - withdrawnAmount, "Funds should be updated.");
-    vm.assertEq(bank.getTotalValue(), initialAmount - withdrawnAmount, "Bank should be updated.");
+    vm.assertEq(bank.getBalance(), initialAmount - withdrawnAmount, "Bank should be updated.");
     vm.assertEq(bank.getWithdrawCount(), 1, "Withdraw count should be at 1.");
   }
 

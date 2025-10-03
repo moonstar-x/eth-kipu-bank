@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// TODO: Add isOwnable from OpenZeppelin.
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -43,18 +45,21 @@ interface IKipuBank {
      * @notice Get funds stored in vault for a given address.
      * @param _address The address to check the funds for.
      * @return funds_ The funds stored in vault for the given address.
+     * @dev Sensitive information, should only be accessible to owner.
      */
     function getFundsForAddress(address _address) external view returns (uint256 funds_);
 
     /**
      * @notice Get this contract's deposit count.
      * @return depositCount_ The deposit count.
+     * @dev Sensitive information, should only be accessible to owner.
      */
     function getDepositCount() external view returns (uint256 depositCount_);
 
     /**
      * @notice Get this contract's withdraw count.
      * @return withdrawCount_ The withdraw count.
+     * @dev Sensitive information, should only be accessible to owner.
      */
     function getWithdrawCount() external view returns (uint256 withdrawCount_);
 }
@@ -65,7 +70,9 @@ interface IKipuBank {
  * @notice A smart contract for secure ETH deposits and withdrawals with bank cap and single withdrawal limit.
  * @dev Do not use in production. This is an educational example.
  */
-contract KipuBank is IKipuBank, ReentrancyGuard {
+contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
+    using SafeERC20 for IERC20;
+
     /**
      * @notice The address used to represent ETH in this contract.
      */
@@ -80,6 +87,11 @@ contract KipuBank is IKipuBank, ReentrancyGuard {
      * @notice The maximum amount that a user can withdraw from their vault in a single transaction.
      */
     uint256 private immutable i_maxSingleWithdrawLimit;
+
+    /**
+     * @notice The USD Coin (USDC) token contract address on the Ethereum network.
+     */
+    IERC20 private immutable i_USDCToken;
 
     /**
      * @notice Counter for each successful deposit.
@@ -149,14 +161,17 @@ contract KipuBank is IKipuBank, ReentrancyGuard {
      * @notice Deploys the contract by setting the bank cap and the maximum single withdrawal limit.
      * @param _bankCap The maximum value that this contract can hold.
      * @param _maxWithdrawLimit The maximum amount that a user can withdraw from their vault in a single transaction.
+     * @param _owner The address of the owner of the contract.
+     * @param _usdcToken The address of the USD Coin (USDC) token contract on the Ethereum network.
      */
-    constructor(uint256 _bankCap, uint256 _maxWithdrawLimit) {
+    constructor(uint256 _bankCap, uint256 _maxWithdrawLimit, address _owner, IERC20 _usdcToken) Ownable(_owner) {
         if (_bankCap < _maxWithdrawLimit) {
             revert ConstructorPreconditionError("Exp. bankCap >= maxWithdrawLimit");
         }
 
         i_bankCap = _bankCap;
         i_maxSingleWithdrawLimit = _maxWithdrawLimit;
+        i_USDCToken = _usdcToken;
     }
 
     /**
@@ -178,8 +193,9 @@ contract KipuBank is IKipuBank, ReentrancyGuard {
      * @notice Get funds stored in vault for a given address.
      * @param _address The address to check the funds for.
      * @return funds_ The funds stored in vault for the given address.
+     * @dev Sensitive information, should only be accessible to owner.
      */
-    function getFundsForAddress(address _address) external view override returns (uint256 funds_) {
+    function getFundsForAddress(address _address) external view onlyOwner override returns (uint256 funds_) {
         funds_ = s_vault[_address];
     }
 
@@ -187,7 +203,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard {
      * @notice Get this contract's deposit count.
      * @return depositCount_ The deposit count.
      */
-    function getDepositCount() external view override returns (uint256 depositCount_) {
+    function getDepositCount() external view onlyOwner override returns (uint256 depositCount_) {
         depositCount_ = s_depositCount;
     }
 
@@ -195,7 +211,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard {
      * @notice Get this contract's withdraw count.
      * @return withdrawCount_ The withdraw count.
      */
-    function getWithdrawCount() external view override returns (uint256 withdrawCount_) {
+    function getWithdrawCount() external view onlyOwner override returns (uint256 withdrawCount_) {
         withdrawCount_ = s_withdrawCount;
     }
 

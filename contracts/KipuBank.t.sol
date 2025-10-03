@@ -3,22 +3,25 @@ pragma solidity ^0.8.28;
 
 import { KipuBank } from "./KipuBank.sol";
 import { Test } from "forge-std/Test.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract KipuBankTest is Test {
     uint256 private constant BANK_CAP = 300;
     uint256 private constant MAX_SINGLE_WITHDRAW_LIMIT = 100;
+    address private owner = address(this);
+    IERC20 private constant USDC_TOKEN = IERC20(address(0));
 
     KipuBank bank;
 
     receive() external payable {}
 
     function setUp() public {
-        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT);
+        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, USDC_TOKEN);
     }
 
     function test_ConstructorShouldRevertIfPreconditionsNotMet() public {
         vm.expectPartialRevert(KipuBank.ConstructorPreconditionError.selector);
-        bank = new KipuBank(50, 100);
+        bank = new KipuBank(50, 100, owner, USDC_TOKEN);
     }
 
     function test_DepositShouldRevertIfBankCapReached() public {

@@ -133,6 +133,7 @@ contract KipuBank is ReentrancyGuard {
 
   /**
    * @notice Get balance in this contract.
+   * @return The balance of this contract.
    */
   function getBalance() public view returns (uint256) {
     return address(this).balance;
@@ -141,6 +142,7 @@ contract KipuBank is ReentrancyGuard {
 
   /**
    * @notice Get balance for the sender.
+   * @return The balance of the sender.
    */
   function getMyFunds() external view returns (uint256) {
     return s_vault[msg.sender];
@@ -149,6 +151,7 @@ contract KipuBank is ReentrancyGuard {
   /**
    * @notice Get funds stored in vault for a given address.
    * @param _address The address to check the funds for.
+   * @return The funds stored in vault for the given address.
    */
   function getFundsForAddress(address _address) external view returns (uint256) {
     return s_vault[_address];
@@ -156,6 +159,7 @@ contract KipuBank is ReentrancyGuard {
 
   /**
    * @notice Get this contract's deposit count.
+   * @return The deposit count.
    */
   function getDepositCount() external view returns (uint256) {
     return s_depositCount;
@@ -163,6 +167,7 @@ contract KipuBank is ReentrancyGuard {
 
   /**
    * @notice Get this contract's withdraw count.
+   * @return The withdraw count.
    */
   function getWithdrawCount() external view returns (uint256) {
     return s_withdrawCount;

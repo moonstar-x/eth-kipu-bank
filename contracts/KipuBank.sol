@@ -9,33 +9,33 @@ contract KipuBank is ReentrancyGuard {
   /**
    * The maximum value tha this contract can hold.
    */
-  uint256 private immutable BANK_CAP;
+  uint256 private immutable i_bankCap;
 
   /**
    * The maximum amount that a user can withdraw from their vault in a single transaction.
    */
-  uint256 private immutable MAX_SINGLE_WITHDRAW_LIMIT;
-
-  /**
-   * Vault that keeps funds per address.
-   */
-  mapping(address => uint256) private _vault;
+  uint256 private immutable i_maxSingleWithdrawLimit;
 
   /**
    * Counter for each successful deposit.
    */
-  uint256 private _depositCount = 0;
+  uint256 private s_depositCount = 0;
 
   /**
    * Counter for each successful withdrawal.
    */
-  uint256 private _withdrawCount = 0;
+  uint256 private s_withdrawCount = 0;
 
-  constructor(uint256 bankCap, uint256 maxWithdrawLimit) {
-    require(bankCap > maxWithdrawLimit, "Bank cap must be greater than max withdraw limit.");
+  /**
+   * Vault that keeps funds per address.
+   */
+  mapping(address => uint256) private s_vault;
 
-    BANK_CAP = bankCap;
-    MAX_SINGLE_WITHDRAW_LIMIT = maxWithdrawLimit;
+  constructor(uint256 _bankCap, uint256 _maxWithdrawLimit) {
+    require(_bankCap > _maxWithdrawLimit, "Bank cap must be greater than max withdraw limit.");
+
+    i_bankCap = _bankCap;
+    i_maxSingleWithdrawLimit = _maxWithdrawLimit;
   }
 
   /**
@@ -43,7 +43,7 @@ contract KipuBank is ReentrancyGuard {
    */
   function deposit() public payable {
     uint256 potentialBankValue = getBalance() + msg.value;
-    if (potentialBankValue > BANK_CAP) {
+    if (potentialBankValue > i_bankCap) {
       revert KipuBankErrors.BankCapReachedError();
     }
 
@@ -53,23 +53,23 @@ contract KipuBank is ReentrancyGuard {
 
   /**
    * Withdraws amount from the address' vault.
-   * @param amount The amount to withdraw. 
+   * @param _amount The amount to withdraw. 
    */
-  function withdraw(uint256 amount) public nonReentrant {
-    if (amount > MAX_SINGLE_WITHDRAW_LIMIT) {
-      revert KipuBankErrors.WithdrawLimitExceededError(msg.sender, MAX_SINGLE_WITHDRAW_LIMIT);
+  function withdraw(uint256 _amount) public nonReentrant {
+    if (_amount > i_maxSingleWithdrawLimit) {
+      revert KipuBankErrors.WithdrawLimitExceededError(msg.sender, i_maxSingleWithdrawLimit);
     }
 
-    uint256 funds = _vault[msg.sender];
-    if (amount > funds) {
-      revert KipuBankErrors.InsufficientFundsError(msg.sender, funds, amount);
+    uint256 funds = s_vault[msg.sender];
+    if (_amount > funds) {
+      revert KipuBankErrors.InsufficientFundsError(msg.sender, funds, _amount);
     }
 
-    _updateWithdrawValues(msg.sender, amount);
-    emit KipuBankEvents.WithdrawSuccess(msg.sender, amount);
+    _updateWithdrawValues(msg.sender, _amount);
+    emit KipuBankEvents.WithdrawSuccess(msg.sender, _amount);
 
     address payable payableSender = payable(msg.sender);
-    (bool success, ) = payableSender.call{ value: amount }("");
+    (bool success, ) = payableSender.call{ value: _amount }("");
     if (!success) {
       revert KipuBankErrors.TransferError();
     }
@@ -87,45 +87,45 @@ contract KipuBank is ReentrancyGuard {
    * Get balance for the sender.
    */
   function getMyFunds() external view returns (uint256) {
-    return _vault[msg.sender];
+    return s_vault[msg.sender];
   }
 
   /**
    * Get funds stored in vault for a given address.
-   * @param addr The address to check the funds for.
+   * @param _address The address to check the funds for.
    */
-  function getFundsForAddress(address addr) external view returns (uint256) {
-    return _vault[addr];
+  function getFundsForAddress(address _address) external view returns (uint256) {
+    return s_vault[_address];
   }
 
   /**
    * Get this contract's deposit count.
    */
   function getDepositCount() external view returns (uint256) {
-    return _depositCount;
+    return s_depositCount;
   }
 
   /**
    * Get this contract's withdraw count.
    */
   function getWithdrawCount() external view returns (uint256) {
-    return _withdrawCount;
+    return s_withdrawCount;
   }
 
   /**
    * Update the relevant variables when a deposit is successful.
    */
-  function _updateDepositValues(address addr, uint256 amount) private {
-    _vault[addr] += amount;
-    _depositCount++;
+  function _updateDepositValues(address _address, uint256 _amount) private {
+    s_vault[_address] += _amount;
+    s_depositCount++;
   }
 
   /**
    * Update the relevant variables when a withdrawal is successful.
    */
-  function _updateWithdrawValues(address addr, uint256 amount) private {
-    _vault[addr] -= amount;
-    _withdrawCount++;
+  function _updateWithdrawValues(address _address, uint256 _amount) private {
+    s_vault[_address] -= _amount;
+    s_withdrawCount++;
   }
 
   receive() external payable {

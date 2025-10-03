@@ -58,6 +58,20 @@ And to auto-fix issues, use:
 npm run lint:fix
 ```
 
+## Formatting
+
+To run the formatter, use:
+
+```bash
+npm run format
+```
+
+And to auto-fix issues, use:
+
+```bash
+npm run format:fix
+```
+
 ## Deploying
 
 Follow these steps to deploy and verify this contract.

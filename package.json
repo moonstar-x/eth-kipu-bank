@@ -7,8 +7,10 @@
     "test": "hardhat test",
     "test:solidity": "hardhat test solidity",
     "test:ts": "hardhat test nodejs",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint . && solhint 'contracts/**/*.sol'",
+    "lint:fix": "eslint . --fix && solhint 'contracts/**/*.sol' --fix",
+    "format": "prettier --check contracts",
+    "format:fix": "prettier --write contracts",
     "deploy:sepolia": "hardhat ignition deploy ignition/modules/KipuBank.ts --network sepolia",
     "verify:sepolia": "hardhat run --build-profile production --network sepolia scripts/verify.ts"
   },
@@ -26,6 +28,9 @@
     "eslint": "^8.57.1",
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.0.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-solidity": "^2.1.0",
+    "solhint": "^6.0.1",
     "typescript": "~5.8.0",
     "viem": "^2.35.1"
   },

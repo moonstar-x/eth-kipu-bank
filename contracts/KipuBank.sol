@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// TODO: Add isOwnable from OpenZeppelin.
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -11,7 +12,12 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
  */
 contract KipuBank is ReentrancyGuard {
   /**
-   * @notice The maximum value tha this contract can hold.
+   * @notice The address used to represent ETH in this contract.
+   */
+  address constant ETH_ADDRESS = address(0);
+
+  /**
+   * @notice The maximum value that this contract can hold.
    */
   uint256 private immutable i_bankCap;
 
@@ -30,6 +36,7 @@ contract KipuBank is ReentrancyGuard {
    */
   uint256 private s_withdrawCount = 0;
 
+  // TODO: This should store multiple tokens.
   /**
    * @notice Vault that keeps funds per address.
    */
@@ -107,6 +114,8 @@ contract KipuBank is ReentrancyGuard {
     emit DepositSuccess(msg.sender, msg.value);
   }
 
+  // TODO: Implement deposit of other tokens.
+
   /**
    * @notice Withdraws amount from the address' vault.
    * @param _amount The amount to withdraw.
@@ -130,6 +139,9 @@ contract KipuBank is ReentrancyGuard {
       revert TransferError();
     }
   }
+
+  // TODO: Implement conversion between ETH and USD.
+  // TODO: Implement chainlink oracle price feed.
 
   /**
    * @notice Get balance in this contract.

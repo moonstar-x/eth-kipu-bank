@@ -50,6 +50,12 @@ contract KipuBank is ReentrancyGuard {
   event WithdrawSuccess(address _address, uint256 _amount);
 
   /**
+   * @notice Error thrown when the constructor preconditions are not met.
+   * @param _reason The reason why the precondition failed.
+   */
+  error ConstructorPreconditionError(string _reason);
+
+  /**
    * @notice Error thrown when the contract has or would reach the bank cap set in the deployment step by the current deposit.
    */
   error BankCapReachedError();
@@ -74,8 +80,15 @@ contract KipuBank is ReentrancyGuard {
    */
   error TransferError();
 
+  /**
+   * @notice Deploys the contract by setting the bank cap and the maximum single withdrawal limit.
+   * @param _bankCap The maximum value that this contract can hold.
+   * @param _maxWithdrawLimit The maximum amount that a user can withdraw from their vault in a single transaction.
+   */
   constructor(uint256 _bankCap, uint256 _maxWithdrawLimit) {
-    require(_bankCap > _maxWithdrawLimit, "Bank cap must be greater than max withdraw limit.");
+    if (_bankCap < _maxWithdrawLimit) {
+      revert ConstructorPreconditionError("Bank cap must be greater than max withdraw limit.");
+    }
 
     i_bankCap = _bankCap;
     i_maxSingleWithdrawLimit = _maxWithdrawLimit;
@@ -171,6 +184,9 @@ contract KipuBank is ReentrancyGuard {
     s_withdrawCount++;
   }
 
+  /**
+   * @notice Allows contract to receive ETH directly.
+   */
   receive() external payable {
     deposit();
   }

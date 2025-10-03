@@ -14,6 +14,11 @@ contract KipuBankTest is Test {
     bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT);
   }
 
+  function test_ConstructorShouldRevertIfPreconditionsNotMet() public {
+    vm.expectPartialRevert(KipuBank.ConstructorPreconditionError.selector);
+    bank = new KipuBank(50, 100);
+  }
+
   function test_DepositShouldRevertIfBankCapReached() public {
     vm.expectRevert(KipuBank.BankCapReachedError.selector);
     bank.deposit{ value: BANK_CAP + 1 }();

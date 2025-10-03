@@ -9,6 +9,7 @@ contract KipuBankTest is Test {
     uint256 private constant BANK_CAP = 300;
     uint256 private constant MAX_SINGLE_WITHDRAW_LIMIT = 100;
     address private owner = address(this);
+    address private priceFeed = address(this);
     address private constant ETH_ADDRESS = address(0);
     IERC20 private constant USDC_TOKEN = IERC20(address(0));
 
@@ -17,12 +18,12 @@ contract KipuBankTest is Test {
     receive() external payable {}
 
     function setUp() public {
-        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, USDC_TOKEN);
+        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, priceFeed, USDC_TOKEN);
     }
 
     function test_ConstructorShouldRevertIfPreconditionsNotMet() public {
         vm.expectPartialRevert(KipuBank.ConstructorPreconditionError.selector);
-        bank = new KipuBank(50, 100, owner, USDC_TOKEN);
+        bank = new KipuBank(50, 100, owner, priceFeed, USDC_TOKEN);
     }
 
     function test_DepositEtherShouldRevertIfBankCapReached() public {
@@ -35,13 +36,13 @@ contract KipuBankTest is Test {
         uint amount = 25;
 
         vm.assertEq(bank.getFundsForAddress(addr, ETH_ADDRESS), 0, "Funds should start at 0.");
-        vm.assertEq(bank.getBalance(), 0, "Bank should start at 0.");
+        vm.assertEq(bank.getBalanceEther(), 0, "Bank should start at 0.");
         vm.assertEq(bank.getDepositCount(), 0, "Deposit count should start at 0.");
 
         bank.depositEther{ value: amount }();
 
         vm.assertEq(bank.getFundsForAddress(addr, ETH_ADDRESS), amount, "Funds should be updated.");
-        vm.assertEq(bank.getBalance(), amount, "Bank should be updated.");
+        vm.assertEq(bank.getBalanceEther(), amount, "Bank should be updated.");
         vm.assertEq(bank.getDepositCount(), 1, "Deposit count be at 1.");
     }
 
@@ -78,7 +79,7 @@ contract KipuBankTest is Test {
         bank.depositEther{ value: initialAmount }();
 
         vm.assertEq(bank.getFundsForAddress(addr, ETH_ADDRESS), initialAmount, "Funds should start at initial amount.");
-        vm.assertEq(bank.getBalance(), initialAmount, "Bank should start at initial amount.");
+        vm.assertEq(bank.getBalanceEther(), initialAmount, "Bank should start at initial amount.");
         vm.assertEq(bank.getWithdrawCount(), 0, "Withdraw count should start at 0.");
 
         bank.withdrawEther(withdrawnAmount);
@@ -88,7 +89,7 @@ contract KipuBankTest is Test {
             initialAmount - withdrawnAmount,
             "Funds should be updated."
         );
-        vm.assertEq(bank.getBalance(), initialAmount - withdrawnAmount, "Bank should be updated.");
+        vm.assertEq(bank.getBalanceEther(), initialAmount - withdrawnAmount, "Bank should be updated.");
         vm.assertEq(bank.getWithdrawCount(), 1, "Withdraw count should be at 1.");
     }
 

@@ -35,6 +35,7 @@
     "viem": "^2.35.1"
   },
   "dependencies": {
+    "@chainlink/contracts": "^1.5.0",
     "@openzeppelin/contracts": "^5.4.0"
   }
 }

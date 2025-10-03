@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 // TODO: Improve what information we pass to errors and events.
+// TODO: Add @dev natspec comments to document when something reverts.
+// TODO: Implement operations of other tokens.
 
 /**
  * @title Kipu Bank Interface
@@ -32,10 +35,10 @@ interface IKipuBank {
     function withdrawEther(uint256 _amount) external;
 
     /**
-     * @notice Get balance in this contract.
-     * @return balance_ The balance of this contract.
+     * @notice Get balance in this contract in ETH.
+     * @return balance_ The balance of this contract in ETH.
      */
-    function getBalance() external view returns (uint256 balance_);
+    function getBalanceEther() external view returns (uint256 balance_);
 
     /**
      * @notice Get balance for the sender for a given token.
@@ -83,6 +86,16 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     address internal constant ETH_ADDRESS = address(0);
 
     /**
+     * @notice The maximum age of a Chainlink oracle response before it is considered stale.
+     */
+    uint256 internal constant ORACLE_STALE_TIME_SECONDS = 3600;
+
+    /**
+     * @notice The factor to convert ETH price to USD.
+     */
+    uint256 internal constant ETH_DECIMAL_FACTOR = 1e20;
+
+    /**
      * @notice The maximum value that this contract can hold.
      */
     uint256 private immutable i_bankCap;
@@ -96,6 +109,11 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice The USD Coin (USDC) token contract address on the Ethereum network.
      */
     IERC20 private immutable i_USDCToken;
+
+    /**
+     * @notice The Chainlink price feed for ETH/USD.
+     */
+    AggregatorV3Interface private s_priceFeed;
 
     /**
      * @notice Counter for each successful deposit.
@@ -163,19 +181,37 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     error TransferError();
 
     /**
+     * @notice Error thrown if the Chainlink oracle returns a stale response.
+     */
+    error OracleStaleResponse();
+
+    /**
+     * @notice Error thrown if the Chainlink oracle returns an incoherent response.
+     */
+    error OracleIncoherentResponse();
+
+    /**
      * @notice Deploys the contract by setting the bank cap and the maximum single withdrawal limit.
      * @param _bankCap The maximum value that this contract can hold.
      * @param _maxWithdrawLimit The maximum amount that a user can withdraw from their vault in a single transaction.
      * @param _owner The address of the owner of the contract.
+     * @param _priceFeed The address of the Chainlink price feed contract for ETH/USD.
      * @param _usdcToken The address of the USD Coin (USDC) token contract on the Ethereum network.
      */
-    constructor(uint256 _bankCap, uint256 _maxWithdrawLimit, address _owner, IERC20 _usdcToken) Ownable(_owner) {
+    constructor(
+        uint256 _bankCap,
+        uint256 _maxWithdrawLimit,
+        address _owner,
+        address _priceFeed,
+        IERC20 _usdcToken
+    ) Ownable(_owner) {
         if (_bankCap < _maxWithdrawLimit) {
             revert ConstructorPreconditionError("Exp. bankCap >= maxWithdrawLimit");
         }
 
         i_bankCap = _bankCap;
         i_maxSingleWithdrawLimit = _maxWithdrawLimit;
+        s_priceFeed = AggregatorV3Interface(_priceFeed);
         i_USDCToken = _usdcToken;
     }
 
@@ -229,7 +265,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice Deposits the value in the address' ETH vault.
      */
     function depositEther() public payable override {
-        uint256 potentialBankValue = getBalance() + msg.value;
+        uint256 potentialBankValue = getBalanceEther() + msg.value;
         if (potentialBankValue > i_bankCap) {
             revert BankCapReachedError();
         }
@@ -237,8 +273,6 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         _updateDepositValues(msg.sender, ETH_ADDRESS, msg.value);
         emit DepositSuccess(msg.sender, ETH_ADDRESS, msg.value);
     }
-
-    // TODO: Implement deposit of other tokens.
 
     /**
      * @notice Withdraws amount from the address' ETH vault.
@@ -264,15 +298,40 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         }
     }
 
-    // TODO: Implement conversion between ETH and USD.
-    // TODO: Implement chainlink oracle price feed.
+    /**
+     * @notice Get balance in this contract in ETH.
+     * @return balance_ The balance of this contract in ETH.
+     */
+    function getBalanceEther() public view override returns (uint256 balance_) {
+        balance_ = address(this).balance;
+    }
 
     /**
-     * @notice Get balance in this contract.
-     * @return balance_ The balance of this contract.
+     * @notice Get the latest price from the Chainlink price feed.
+     * @return price_ The latest price.
      */
-    function getBalance() public view override returns (uint256 balance_) {
-        balance_ = address(this).balance;
+    function _getLatestPrice() internal view returns (uint256 price_) {
+        (, int256 price, , uint256 updatedAt, ) = s_priceFeed.latestRoundData();
+
+        if (price < 0) {
+            revert OracleIncoherentResponse();
+        }
+
+        if (updatedAt < block.timestamp - ORACLE_STALE_TIME_SECONDS) {
+            revert OracleStaleResponse();
+        }
+
+        price_ = uint256(price);
+    }
+
+    /**
+     * @notice Converts an amount in ETH to USD.
+     * @param _amountEth The amount in ETH.
+     * @param _ethPrice The current price of ETH in USD.
+     * @return amountUsd_ The equivalent amount in USD.
+     */
+    function _convertEthToUsd(uint256 _amountEth, uint256 _ethPrice) internal pure returns (uint256 amountUsd_) {
+        amountUsd_ = (_amountEth * _ethPrice) / ETH_DECIMAL_FACTOR;
     }
 
     /**

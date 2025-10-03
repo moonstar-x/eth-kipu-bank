@@ -91,7 +91,7 @@
     "no-complex-fallback": "error",
     "no-inline-assembly": "error",
     "not-rely-on-block-hash": "error",
-    "not-rely-on-time": "error",
+    "not-rely-on-time": "off",
     "reentrancy": "error",
     "state-visibility": "error"
   }

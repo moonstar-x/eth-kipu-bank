@@ -2,8 +2,6 @@
 pragma solidity ^0.8.28;
 
 import { KipuBank } from "./KipuBank.sol";
-import { KipuBankErrors } from "./errors/KipuBankErrors.sol";
-import { KipuBankEvents } from "./events/KipuBankEvents.sol";
 import { Test } from "forge-std/Test.sol";
 
 contract KipuBankTest is Test {
@@ -17,7 +15,7 @@ contract KipuBankTest is Test {
   }
 
   function test_DepositShouldRevertIfBankCapReached() public {
-    vm.expectRevert(KipuBankErrors.BankCapReachedError.selector);
+    vm.expectRevert(KipuBank.BankCapReachedError.selector);
     bank.deposit{ value: BANK_CAP + 1 }();
   }
 
@@ -38,18 +36,18 @@ contract KipuBankTest is Test {
 
   function test_DepositShouldEmitSuccess() public {
     vm.expectEmit();
-    emit KipuBankEvents.DepositSuccess(address(this), 1);
+    emit KipuBank.DepositSuccess(address(this), 1);
 
     bank.deposit{ value: 1 }();
   }
 
   function test_WithdrawShouldRevertIfAmountExceedsLimit() public {
-    vm.expectPartialRevert(KipuBankErrors.WithdrawLimitExceededError.selector);
+    vm.expectPartialRevert(KipuBank.WithdrawLimitExceededError.selector);
     bank.withdraw(MAX_SINGLE_WITHDRAW_LIMIT + 1);
   }
 
   function test_WithdrawShouldRevertIfAmountExceedsFunds() public {
-    vm.expectPartialRevert(KipuBankErrors.InsufficientFundsError.selector);
+    vm.expectPartialRevert(KipuBank.InsufficientFundsError.selector);
     bank.withdraw(10);
   }
 
@@ -83,7 +81,7 @@ contract KipuBankTest is Test {
     bank.deposit{ value: 10 }();
 
     vm.expectEmit();
-    emit KipuBankEvents.WithdrawSuccess(address(this), 5);
+    emit KipuBank.WithdrawSuccess(address(this), 5);
 
     bank.withdraw(5);
   }

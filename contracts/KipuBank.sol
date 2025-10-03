@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import { KipuBankErrors } from "./errors/KipuBankErrors.sol";
-import { KipuBankEvents } from "./events/KipuBankEvents.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract KipuBank is ReentrancyGuard {
@@ -31,6 +29,48 @@ contract KipuBank is ReentrancyGuard {
    */
   mapping(address => uint256) private s_vault;
 
+  /**
+   * Event emitted when a deposit is successful.
+   * @param addr The address of the message sender.
+   * @param amount The amount deposited.
+   */
+  event DepositSuccess(address addr, uint256 amount);
+
+  /**
+   * Event emitted when a withdraw is successful.
+   * @param addr The address of the message sender.
+   * @param amount The amount withdrawn.
+   */
+  event WithdrawSuccess(address addr, uint256 amount);
+
+  /**
+   * Error thrown when the contract has or would reach the bank cap set
+   * in the deployment step by the current deposit.
+   */
+  error BankCapReachedError();
+
+  /**
+   * Error thrown when the current withdrawal request would exceed the
+   * withdraw limit set in the deployment step.
+   * @param sender The address of the sender.
+   * @param amount The amount that was attempted to be withdrawn.
+   */
+  error WithdrawLimitExceededError(address sender, uint256 amount);
+
+  /**
+   * Error thrown when a withdrawal request attempts to withdraw an amount
+   * that exceeds the funds stored in the contract.
+   * @param sender The address of the sender.
+   * @param funds The funds in the sender's vault.
+   * @param amount The amount that was attempted to be withdrawn.
+   */
+  error InsufficientFundsError(address sender, uint256 funds, uint256 amount);
+
+  /**
+   * Error thrown if a transfer was not successful.
+   */
+  error TransferError();
+
   constructor(uint256 _bankCap, uint256 _maxWithdrawLimit) {
     require(_bankCap > _maxWithdrawLimit, "Bank cap must be greater than max withdraw limit.");
 
@@ -44,11 +84,11 @@ contract KipuBank is ReentrancyGuard {
   function deposit() public payable {
     uint256 potentialBankValue = getBalance() + msg.value;
     if (potentialBankValue > i_bankCap) {
-      revert KipuBankErrors.BankCapReachedError();
+      revert BankCapReachedError();
     }
 
     _updateDepositValues(msg.sender, msg.value);
-    emit KipuBankEvents.DepositSuccess(msg.sender, msg.value);
+    emit DepositSuccess(msg.sender, msg.value);
   }
 
   /**
@@ -57,21 +97,21 @@ contract KipuBank is ReentrancyGuard {
    */
   function withdraw(uint256 _amount) public nonReentrant {
     if (_amount > i_maxSingleWithdrawLimit) {
-      revert KipuBankErrors.WithdrawLimitExceededError(msg.sender, i_maxSingleWithdrawLimit);
+      revert WithdrawLimitExceededError(msg.sender, i_maxSingleWithdrawLimit);
     }
 
     uint256 funds = s_vault[msg.sender];
     if (_amount > funds) {
-      revert KipuBankErrors.InsufficientFundsError(msg.sender, funds, _amount);
+      revert InsufficientFundsError(msg.sender, funds, _amount);
     }
 
     _updateWithdrawValues(msg.sender, _amount);
-    emit KipuBankEvents.WithdrawSuccess(msg.sender, _amount);
+    emit WithdrawSuccess(msg.sender, _amount);
 
     address payable payableSender = payable(msg.sender);
     (bool success, ) = payableSender.call{ value: _amount }("");
     if (!success) {
-      revert KipuBankErrors.TransferError();
+      revert TransferError();
     }
   }
 

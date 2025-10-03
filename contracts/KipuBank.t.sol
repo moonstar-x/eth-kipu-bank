@@ -111,4 +111,9 @@ contract KipuBankTest is Test {
         bank.withdrawEther(5);
         vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 5, "My funds should be updated after withdraw.");
     }
+
+    // TODO: Add test for getBalanceUsd.
+    // TODO: Add test for depositUsdc.
+    // TODO: Add test for withdrawUsdc.
+    // TODO: Re-organize tests in order.
 }

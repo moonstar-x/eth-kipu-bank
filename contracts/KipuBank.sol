@@ -9,7 +9,6 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 
 // TODO: Improve what information we pass to errors and events.
 // TODO: Add @dev natspec comments to document when something reverts.
-// TODO: Implement operations of other tokens.
 
 /**
  * @title Kipu Bank Interface
@@ -29,16 +28,34 @@ interface IKipuBank {
     function depositEther() external payable;
 
     /**
+     * @notice Deposits the value in the address' USDC vault.
+     * @param _amount The amount in USDC to deposit.
+     */
+    function depositUsdc(uint256 _amount) external payable;
+
+    /**
      * @notice Withdraws amount from the address' ETH vault.
      * @param _amount The amount to withdraw.
      */
     function withdrawEther(uint256 _amount) external;
 
     /**
+     * @notice Withdraws the value in the address' USDC vault.
+     * @param _amount The amount in USDC to withdraw.
+     */
+    function withdrawUsdc(uint256 _amount) external;
+
+    /**
      * @notice Get balance in this contract in ETH.
      * @return balance_ The balance of this contract in ETH.
      */
     function getBalanceEther() external view returns (uint256 balance_);
+
+    /**
+     * @notice Get balance in this contract in USD.
+     * @return balance_ The balance of this contract in USD.
+     */
+    function getBalanceUsd() external view returns (uint256 balance_);
 
     /**
      * @notice Get balance for the sender for a given token.
@@ -248,6 +265,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice Get this contract's deposit count.
      * @return depositCount_ The deposit count.
+     * @dev Sensitive information, should only be accessible to owner.
      */
     function getDepositCount() external view override onlyOwner returns (uint256 depositCount_) {
         depositCount_ = s_depositCount;
@@ -256,6 +274,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice Get this contract's withdraw count.
      * @return withdrawCount_ The withdraw count.
+     * @dev Sensitive information, should only be accessible to owner.
      */
     function getWithdrawCount() external view override onlyOwner returns (uint256 withdrawCount_) {
         withdrawCount_ = s_withdrawCount;
@@ -275,6 +294,22 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Deposits the value in the address' USDC vault.
+     * @param _amount The amount in USDC to deposit.
+     */
+    function depositUsdc(uint256 _amount) public payable override {
+        uint256 potentialBankValue = getBalanceUsd() + _convertEthToUsd(_amount, _getLatestPriceEthToUsd());
+        if (potentialBankValue > i_bankCap) {
+            revert BankCapReachedError();
+        }
+
+        _updateDepositValues(msg.sender, address(i_USDCToken), _amount);
+        i_USDCToken.safeTransferFrom(msg.sender, address(this), _amount);
+
+        emit DepositSuccess(msg.sender, address(i_USDCToken), _amount);
+    }
+
+    /**
      * @notice Withdraws amount from the address' ETH vault.
      * @param _amount The amount to withdraw.
      */
@@ -289,13 +324,36 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         }
 
         _updateWithdrawValues(msg.sender, ETH_ADDRESS, _amount);
-        emit WithdrawSuccess(msg.sender, ETH_ADDRESS, _amount);
 
         address payable payableSender = payable(msg.sender);
         (bool success, ) = payableSender.call{ value: _amount }("");
         if (!success) {
             revert TransferError();
         }
+
+        emit WithdrawSuccess(msg.sender, ETH_ADDRESS, _amount);
+    }
+
+    /**
+     * @notice Withdraws the value in the address' USDC vault.
+     * @param _amount The amount in USDC to withdraw.
+     */
+    function withdrawUsdc(uint256 _amount) public override nonReentrant {
+        uint256 maxSingleWithdrawLimitUsd = _convertEthToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
+        if (_amount > maxSingleWithdrawLimitUsd) {
+            revert WithdrawLimitExceededError(msg.sender, maxSingleWithdrawLimitUsd);
+        }
+
+        uint256 funds = s_vault[address(i_USDCToken)][msg.sender];
+        if (_amount > funds) {
+            revert InsufficientFundsError(msg.sender, funds, _amount);
+        }
+
+        _updateWithdrawValues(msg.sender, address(i_USDCToken), _amount);
+
+        i_USDCToken.safeTransfer(msg.sender, _amount);
+
+        emit WithdrawSuccess(msg.sender, address(i_USDCToken), _amount);
     }
 
     /**
@@ -307,10 +365,18 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Get balance in this contract in USD.
+     * @return balance_ The balance of this contract in USD.
+     */
+    function getBalanceUsd() public view override returns (uint256 balance_) {
+        balance_ = _convertEthToUsd(getBalanceEther(), _getLatestPriceEthToUsd());
+    }
+
+    /**
      * @notice Get the latest price from the Chainlink price feed.
      * @return price_ The latest price.
      */
-    function _getLatestPrice() internal view returns (uint256 price_) {
+    function _getLatestPriceEthToUsd() internal view returns (uint256 price_) {
         (, int256 price, , uint256 updatedAt, ) = s_priceFeed.latestRoundData();
 
         if (price < 0) {

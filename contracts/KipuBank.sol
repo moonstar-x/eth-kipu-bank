@@ -6,6 +6,8 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+// TODO: Improve what information we pass to errors and events.
+
 /**
  * @title Kipu Bank Interface
  * @author Christian López (@moonstar-x)
@@ -19,15 +21,15 @@ interface IKipuBank {
     receive() external payable;
 
     /**
-     * @notice Deposits the value in the address' vault.
+     * @notice Deposits the value in the address' ETH vault.
      */
-    function deposit() external payable;
+    function depositEther() external payable;
 
     /**
-     * @notice Withdraws amount from the address' vault.
+     * @notice Withdraws amount from the address' ETH vault.
      * @param _amount The amount to withdraw.
      */
-    function withdraw(uint256 _amount) external;
+    function withdrawEther(uint256 _amount) external;
 
     /**
      * @notice Get balance in this contract.
@@ -36,18 +38,20 @@ interface IKipuBank {
     function getBalance() external view returns (uint256 balance_);
 
     /**
-     * @notice Get balance for the sender.
+     * @notice Get balance for the sender for a given token.
+     * @param _token The token address to check the balance for (use address(0) for ETH).
      * @return funds_ The balance of the sender.
      */
-    function getMyFunds() external view returns (uint256 funds_);
+    function getMyFunds(address _token) external view returns (uint256 funds_);
 
     /**
-     * @notice Get funds stored in vault for a given address.
+     * @notice Get funds stored in vault for a given address for a given token.
      * @param _address The address to check the funds for.
+     * @param _token The token address to check the balance for (use address(0) for ETH).
      * @return funds_ The funds stored in vault for the given address.
      * @dev Sensitive information, should only be accessible to owner.
      */
-    function getFundsForAddress(address _address) external view returns (uint256 funds_);
+    function getFundsForAddress(address _address, address _token) external view returns (uint256 funds_);
 
     /**
      * @notice Get this contract's deposit count.
@@ -103,25 +107,26 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      */
     uint256 private s_withdrawCount = 0;
 
-    // TODO: This should store multiple tokens.
     /**
-     * @notice Vault that keeps funds per address.
+     * @notice Vault that keeps funds per address per token.
      */
-    mapping(address _userAddress => uint256 _amount) private s_vault;
+    mapping(address _userAddress => mapping(address _token => uint256 _amount)) private s_vault;
 
     /**
      * @notice Event emitted when a deposit is successful.
      * @param _address The address of the message sender.
+     * @param _token The token address being deposited.
      * @param _amount The amount deposited.
      */
-    event DepositSuccess(address indexed _address, uint256 indexed _amount);
+    event DepositSuccess(address indexed _address, address indexed _token, uint256 indexed _amount);
 
     /**
      * @notice Event emitted when a withdraw is successful.
      * @param _address The address of the message sender.
+     * @param _token The token address being withdrawn.
      * @param _amount The amount withdrawn.
      */
-    event WithdrawSuccess(address indexed _address, uint256 indexed _amount);
+    event WithdrawSuccess(address indexed _address, address indexed _token, uint256 indexed _amount);
 
     /**
      * @notice Error thrown when the constructor preconditions are not met.
@@ -178,32 +183,37 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice Allows contract to receive ETH directly.
      */
     receive() external payable override {
-        deposit();
+        depositEther();
     }
 
     /**
-     * @notice Get balance for the sender.
+     * @notice Get balance for the sender for a given token.
+     * @param _token The token address to check the balance for (use address(0) for ETH).
      * @return funds_ The balance of the sender.
      */
-    function getMyFunds() external view override returns (uint256 funds_) {
-        funds_ = s_vault[msg.sender];
+    function getMyFunds(address _token) external view override returns (uint256 funds_) {
+        funds_ = s_vault[_token][msg.sender];
     }
 
     /**
-     * @notice Get funds stored in vault for a given address.
+     * @notice Get funds stored in vault for a given address for a given token.
      * @param _address The address to check the funds for.
+     * @param _token The token address to check the balance for (use address(0) for ETH).
      * @return funds_ The funds stored in vault for the given address.
      * @dev Sensitive information, should only be accessible to owner.
      */
-    function getFundsForAddress(address _address) external view onlyOwner override returns (uint256 funds_) {
-        funds_ = s_vault[_address];
+    function getFundsForAddress(
+        address _address,
+        address _token
+    ) external view override onlyOwner returns (uint256 funds_) {
+        funds_ = s_vault[_token][_address];
     }
 
     /**
      * @notice Get this contract's deposit count.
      * @return depositCount_ The deposit count.
      */
-    function getDepositCount() external view onlyOwner override returns (uint256 depositCount_) {
+    function getDepositCount() external view override onlyOwner returns (uint256 depositCount_) {
         depositCount_ = s_depositCount;
     }
 
@@ -211,41 +221,41 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice Get this contract's withdraw count.
      * @return withdrawCount_ The withdraw count.
      */
-    function getWithdrawCount() external view onlyOwner override returns (uint256 withdrawCount_) {
+    function getWithdrawCount() external view override onlyOwner returns (uint256 withdrawCount_) {
         withdrawCount_ = s_withdrawCount;
     }
 
     /**
-     * @notice Deposits the value in the address' vault.
+     * @notice Deposits the value in the address' ETH vault.
      */
-    function deposit() public payable override {
+    function depositEther() public payable override {
         uint256 potentialBankValue = getBalance() + msg.value;
         if (potentialBankValue > i_bankCap) {
             revert BankCapReachedError();
         }
 
-        _updateDepositValues(msg.sender, msg.value);
-        emit DepositSuccess(msg.sender, msg.value);
+        _updateDepositValues(msg.sender, ETH_ADDRESS, msg.value);
+        emit DepositSuccess(msg.sender, ETH_ADDRESS, msg.value);
     }
 
     // TODO: Implement deposit of other tokens.
 
     /**
-     * @notice Withdraws amount from the address' vault.
+     * @notice Withdraws amount from the address' ETH vault.
      * @param _amount The amount to withdraw.
      */
-    function withdraw(uint256 _amount) public override nonReentrant {
+    function withdrawEther(uint256 _amount) public override nonReentrant {
         if (_amount > i_maxSingleWithdrawLimit) {
             revert WithdrawLimitExceededError(msg.sender, i_maxSingleWithdrawLimit);
         }
 
-        uint256 funds = s_vault[msg.sender];
+        uint256 funds = s_vault[ETH_ADDRESS][msg.sender];
         if (_amount > funds) {
             revert InsufficientFundsError(msg.sender, funds, _amount);
         }
 
-        _updateWithdrawValues(msg.sender, _amount);
-        emit WithdrawSuccess(msg.sender, _amount);
+        _updateWithdrawValues(msg.sender, ETH_ADDRESS, _amount);
+        emit WithdrawSuccess(msg.sender, ETH_ADDRESS, _amount);
 
         address payable payableSender = payable(msg.sender);
         (bool success, ) = payableSender.call{ value: _amount }("");
@@ -268,20 +278,22 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice Update the relevant variables when a deposit is successful.
      * @param _address The address of the user making the deposit.
+     * @param _token The token address being deposited.
      * @param _amount The amount deposited.
      */
-    function _updateDepositValues(address _address, uint256 _amount) private {
-        s_vault[_address] += _amount;
+    function _updateDepositValues(address _address, address _token, uint256 _amount) private {
+        s_vault[_token][_address] += _amount;
         ++s_depositCount;
     }
 
     /**
      * @notice Update the relevant variables when a withdrawal is successful.
      * @param _address The address of the user making the withdrawal.
+     * @param _token The token address being withdrawn.
      * @param _amount The amount withdrawn.
      */
-    function _updateWithdrawValues(address _address, uint256 _amount) private {
-        s_vault[_address] -= _amount;
+    function _updateWithdrawValues(address _address, address _token, uint256 _amount) private {
+        s_vault[_token][_address] -= _amount;
         ++s_withdrawCount;
     }
 }

@@ -7,7 +7,6 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-// TODO: Improve what information we pass to errors and events.
 // TODO: Add @dev natspec comments to document when something reverts.
 
 /**
@@ -172,30 +171,40 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice Error thrown when the contract has or would reach the bank cap set in
      * the deployment step by the current deposit.
+     * @param _sender The address of the sender.
+     * @param _token The token address being deposited.
+     * @param _potentialBankValue The potential new bank value if the deposit is accepted.
+     * @param _bankCap The maximum bank cap.
      */
-    error BankCapReachedError();
+    error BankCapReachedError(address _sender, address _token, uint256 _potentialBankValue, uint256 _bankCap);
 
     /**
      * @notice Error thrown when the current withdrawal request would exceed the withdraw
      * limit set in the deployment step.
      * @param _sender The address of the sender.
+     * @param _token The token address being withdrawn.
      * @param _amount The amount that was attempted to be withdrawn.
+     * @param _limit The maximum single withdrawal limit.
      */
-    error WithdrawLimitExceededError(address _sender, uint256 _amount);
+    error WithdrawLimitExceededError(address _sender, address _token, uint256 _amount, uint256 _limit);
 
     /**
      * @notice Error thrown when a withdrawal request attempts to withdraw an amount that
      * exceeds the funds stored in the contract.
      * @param _sender The address of the sender.
+     * @param _token The token address being withdrawn.
      * @param _funds The funds in the sender's vault.
      * @param _amount The amount that was attempted to be withdrawn.
      */
-    error InsufficientFundsError(address _sender, uint256 _funds, uint256 _amount);
+    error InsufficientFundsError(address _sender, address _token, uint256 _funds, uint256 _amount);
 
     /**
      * @notice Error thrown if a transfer was not successful.
+     * @param _sender The address of the sender.
+     * @param _token The token address being transferred.
+     * @param _amount The amount that was attempted to be transferred.
      */
-    error TransferError();
+    error TransferError(address _sender, address _token, uint256 _amount);
 
     /**
      * @notice Error thrown if the Chainlink oracle returns a stale response.
@@ -286,7 +295,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     function depositEther() public payable override {
         uint256 potentialBankValue = getBalanceEther() + msg.value;
         if (potentialBankValue > i_bankCap) {
-            revert BankCapReachedError();
+            revert BankCapReachedError(msg.sender, ETH_ADDRESS, potentialBankValue, i_bankCap);
         }
 
         _updateDepositValues(msg.sender, ETH_ADDRESS, msg.value);
@@ -300,7 +309,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     function depositUsdc(uint256 _amount) public payable override {
         uint256 potentialBankValue = getBalanceUsd() + _convertEthToUsd(_amount, _getLatestPriceEthToUsd());
         if (potentialBankValue > i_bankCap) {
-            revert BankCapReachedError();
+            revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, i_bankCap);
         }
 
         _updateDepositValues(msg.sender, address(i_USDCToken), _amount);
@@ -315,12 +324,12 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      */
     function withdrawEther(uint256 _amount) public override nonReentrant {
         if (_amount > i_maxSingleWithdrawLimit) {
-            revert WithdrawLimitExceededError(msg.sender, i_maxSingleWithdrawLimit);
+            revert WithdrawLimitExceededError(msg.sender, ETH_ADDRESS, _amount, i_maxSingleWithdrawLimit);
         }
 
         uint256 funds = s_vault[ETH_ADDRESS][msg.sender];
         if (_amount > funds) {
-            revert InsufficientFundsError(msg.sender, funds, _amount);
+            revert InsufficientFundsError(msg.sender, ETH_ADDRESS, funds, _amount);
         }
 
         _updateWithdrawValues(msg.sender, ETH_ADDRESS, _amount);
@@ -328,7 +337,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         address payable payableSender = payable(msg.sender);
         (bool success, ) = payableSender.call{ value: _amount }("");
         if (!success) {
-            revert TransferError();
+            revert TransferError(msg.sender, ETH_ADDRESS, _amount);
         }
 
         emit WithdrawSuccess(msg.sender, ETH_ADDRESS, _amount);
@@ -341,12 +350,12 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     function withdrawUsdc(uint256 _amount) public override nonReentrant {
         uint256 maxSingleWithdrawLimitUsd = _convertEthToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
         if (_amount > maxSingleWithdrawLimitUsd) {
-            revert WithdrawLimitExceededError(msg.sender, maxSingleWithdrawLimitUsd);
+            revert WithdrawLimitExceededError(msg.sender, address(i_USDCToken), _amount, maxSingleWithdrawLimitUsd);
         }
 
         uint256 funds = s_vault[address(i_USDCToken)][msg.sender];
         if (_amount > funds) {
-            revert InsufficientFundsError(msg.sender, funds, _amount);
+            revert InsufficientFundsError(msg.sender, address(i_USDCToken), funds, _amount);
         }
 
         _updateWithdrawValues(msg.sender, address(i_USDCToken), _amount);

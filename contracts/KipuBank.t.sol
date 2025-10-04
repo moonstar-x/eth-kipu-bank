@@ -26,8 +26,27 @@ contract KipuBankTest is Test {
         bank = new KipuBank(50, 100, owner, priceFeed, USDC_TOKEN);
     }
 
+    function test_GetMyFundsShouldReturnUserFunds() public {
+        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 0, "My funds should initialized at 0.");
+
+        bank.depositEther{ value: 10 }();
+        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 10, "My funds should be updated after deposit.");
+
+        bank.withdrawEther(5);
+        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 5, "My funds should be updated after withdraw.");
+    }
+
+    // TODO: Test getMyFunds returns correct funds for USDC.
+
+    // TODO: Test getFundsForAddress returns correct funds for ETH.
+    // TODO: Test getFundsForAddress returns correct funds for USDC.
+
+    // TODO: Test getDepositCount returns correct count.
+
+    // TODO: Test getWithdrawCount returns correct count.
+
     function test_DepositEtherShouldRevertIfBankCapReached() public {
-        vm.expectRevert(KipuBank.BankCapReachedError.selector);
+        vm.expectPartialRevert(KipuBank.BankCapReachedError.selector);
         bank.depositEther{ value: BANK_CAP + 1 }();
     }
 
@@ -53,6 +72,11 @@ contract KipuBankTest is Test {
         bank.depositEther{ value: 1 }();
     }
 
+    // TODO: Test depositUsdc should revert if bank cap reached.
+    // TODO: Test depositUsdc should update values.
+    // TODO: Test depositUsdc should transfer.
+    // TODO: Test depositUsdc should emit success.
+
     function test_WithdrawEtherShouldRevertIfAmountExceedsLimit() public {
         vm.expectPartialRevert(KipuBank.WithdrawLimitExceededError.selector);
         bank.withdrawEther(MAX_SINGLE_WITHDRAW_LIMIT + 1);
@@ -61,12 +85,6 @@ contract KipuBankTest is Test {
     function test_WithdrawEtherShouldRevertIfAmountExceedsFunds() public {
         vm.expectPartialRevert(KipuBank.InsufficientFundsError.selector);
         bank.withdrawEther(10);
-    }
-
-    function test_WithdrawEtherShouldTransferAmountToSender() public {
-        vm.expectCall(address(bank), abi.encodeCall(bank.withdrawEther, (5)));
-        bank.depositEther{ value: 10 }();
-        bank.withdrawEther(5);
     }
 
     function test_WithdrawEtherShouldUpdateValues() public {
@@ -93,6 +111,14 @@ contract KipuBankTest is Test {
         vm.assertEq(bank.getWithdrawCount(), 1, "Withdraw count should be at 1.");
     }
 
+    function test_WithdrawEtherShouldTransferAmountToSender() public {
+        vm.expectCall(address(bank), abi.encodeCall(bank.withdrawEther, (5)));
+        bank.depositEther{ value: 10 }();
+        bank.withdrawEther(5);
+    }
+
+    // TODO: Test withdrawEther should revert if transfer fails.
+
     function test_WithdrawEtherShouldEmitSuccess() public {
         bank.depositEther{ value: 10 }();
 
@@ -102,18 +128,13 @@ contract KipuBankTest is Test {
         bank.withdrawEther(5);
     }
 
-    function test_GetMyFundsShouldReturnUserFunds() public {
-        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 0, "My funds should initialized at 0.");
+    // TODO: Test withdrawUsdc should revert if amount exceeds limit.
+    // TODO: Test withdrawUsdc should revert if insufficient funds.
+    // TODO: Test withdrawUsdc should update values.
+    // TODO: Test withdrawUsdc should transfer.
+    // TODO: Test withdrawUsdc should emit success.
 
-        bank.depositEther{ value: 10 }();
-        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 10, "My funds should be updated after deposit.");
+    // TODO: Test getBalanceEther should return correct balance.
 
-        bank.withdrawEther(5);
-        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 5, "My funds should be updated after withdraw.");
-    }
-
-    // TODO: Add test for getBalanceUsd.
-    // TODO: Add test for depositUsdc.
-    // TODO: Add test for withdrawUsdc.
-    // TODO: Re-organize tests in order.
+    // TODO: Test getBalanceUsd should return correct balance.
 }

@@ -16,7 +16,7 @@ contract KipuBankTest is Test {
 
     address private constant ETH_ADDRESS = address(0);
     address private usdcAddress = address(mockedUsdcToken);
-    int256 private constant ETH_FACTOR = 1e20;
+    int256 private constant ETH_FACTOR = 1e18;
     int256 private constant MOCKED_ETH_PRICE = 2 * ETH_FACTOR;
 
     KipuBank private bank;

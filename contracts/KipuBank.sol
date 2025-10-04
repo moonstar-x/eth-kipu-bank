@@ -28,6 +28,7 @@ interface IKipuBank {
 
     /**
      * @notice Deposits the value in the address' USDC vault.
+     * Bank cap is dynamically converted from ETH to USDC, assume that this value might fluctuate.
      * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
      * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
@@ -125,7 +126,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice The factor to convert ETH price to USD.
      */
-    uint256 internal constant ETH_DECIMAL_FACTOR = 1e20;
+    uint256 internal constant ETH_DECIMAL_FACTOR = 1e18;
 
     /**
      * @notice The maximum value that this contract can hold.
@@ -270,7 +271,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @return funds_ The balance of the sender.
      */
     function getMyFunds(address _token) external view override returns (uint256 funds_) {
-        funds_ = s_vault[_token][msg.sender];
+        funds_ = s_vault[msg.sender][_token];
     }
 
     /**
@@ -284,7 +285,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         address _address,
         address _token
     ) external view override onlyOwner returns (uint256 funds_) {
-        funds_ = s_vault[_token][_address];
+        funds_ = s_vault[_address][_token];
     }
 
     /**
@@ -311,9 +312,9 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @dev Emits a DepositSuccess event upon success.
      */
     function depositEther() public payable override {
-        uint256 potentialBankValue = getBalanceEther() + msg.value;
-        if (potentialBankValue > i_bankCap) {
-            revert BankCapReachedError(msg.sender, ETH_ADDRESS, potentialBankValue, i_bankCap);
+        uint256 bankBalance = getBalanceEther();
+        if (bankBalance > i_bankCap) {
+            revert BankCapReachedError(msg.sender, ETH_ADDRESS, bankBalance, i_bankCap);
         }
 
         _updateDepositValues(msg.sender, ETH_ADDRESS, msg.value);
@@ -322,6 +323,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Deposits the value in the address' USDC vault.
+     * Bank cap is dynamically converted from ETH to USDC, assume that this value might fluctuate.
      * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
      * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
@@ -352,7 +354,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
             revert WithdrawLimitExceededError(msg.sender, ETH_ADDRESS, _amount, i_maxSingleWithdrawLimit);
         }
 
-        uint256 funds = s_vault[ETH_ADDRESS][msg.sender];
+        uint256 funds = s_vault[msg.sender][ETH_ADDRESS];
         if (_amount > funds) {
             revert InsufficientFundsError(msg.sender, ETH_ADDRESS, funds, _amount);
         }
@@ -382,7 +384,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
             revert WithdrawLimitExceededError(msg.sender, address(i_USDCToken), _amount, usdcMaxSingleWithdrawLimit);
         }
 
-        uint256 funds = s_vault[address(i_USDCToken)][msg.sender];
+        uint256 funds = s_vault[msg.sender][address(i_USDCToken)];
         if (_amount > funds) {
             revert InsufficientFundsError(msg.sender, address(i_USDCToken), funds, _amount);
         }
@@ -424,7 +426,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @dev Reverts with OracleStaleResponse if the response is stale.
      * @return price_ The latest price.
      */
-    function _getLatestPriceEthToUsd() public view returns (uint256 price_) {
+    function _getLatestPriceEthToUsd() internal view returns (uint256 price_) {
         (, int256 price, , uint256 updatedAt, ) = s_priceFeed.latestRoundData();
 
         if (price < 0) {
@@ -455,7 +457,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount deposited.
      */
     function _updateDepositValues(address _address, address _token, uint256 _amount) private {
-        s_vault[_token][_address] += _amount;
+        s_vault[_address][_token] += _amount;
         ++s_depositCount;
     }
 
@@ -466,7 +468,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount withdrawn.
      */
     function _updateWithdrawValues(address _address, address _token, uint256 _amount) private {
-        s_vault[_token][_address] -= _amount;
+        s_vault[_address][_token] -= _amount;
         ++s_withdrawCount;
     }
 }

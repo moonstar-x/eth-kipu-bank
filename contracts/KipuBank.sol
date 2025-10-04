@@ -126,7 +126,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     /**
      * @notice The factor to convert ETH price to USD.
      */
-    uint256 internal constant ETH_DECIMAL_FACTOR = 1e18;
+    uint256 internal constant ETH_DECIMAL_FACTOR = 1e8;
 
     /**
      * @notice The maximum value that this contract can hold.

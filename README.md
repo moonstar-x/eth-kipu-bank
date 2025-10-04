@@ -76,9 +76,17 @@ npm run format:fix
 
 Follow these steps to deploy and verify this contract.
 
-First, copy the `.env.sample` file into a `.env` file and fill out the values as necessary.
+First, copy the `.env.sample` file into a `.env` file and fill out the values as necessary:
 
-Both `KIPU_BANK_CAP` and `KIPU_BANK_MAX_SINGLE_WITHDRAW_LIMIT` are the contract's constructor arguments and represent contract's balance cap and max limit for a single withdrawal request respectively.
+```text
+KIPU_BANK_CAP=300
+KIPU_BANK_MAX_SINGLE_WITHDRAW_LIMIT=150
+KIPU_BANK_OWNER_ADDRESS=0xA9A7c8E80D6A6b7ca89bB1d34f160acb62de457A
+KIPU_BANK_ETH_USD_PRICE_FEED=0x694AA1769357215DE4FAC081bf1f309aDC325306
+KIPU_BANK_USDC_TOKEN_ADDRESS=0xf08A50178dfcDe18524640EA6618a1f965821715
+```
+
+> Feel free to change any variables to your liking.
 
 As for the next variables:
 
@@ -104,7 +112,10 @@ This will verify the contract on Etherscan.
 
 ## Interacting with the Contract
 
-This contract has been deployed and verified at the following address: [0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9](https://sepolia.etherscan.io/address/0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9#code)
+### Available Deployments (Sepolia Network)
+
+- V1 -> [0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9](https://sepolia.etherscan.io/address/0xc8A84d9254f6d7C2f1Ed6B4a265E41a12b1d3Ee9#code)
+- V2 -> [0xB6bc2ff1aE7652B122C90562fEe604A1Eb8f09Dd](https://sepolia.etherscan.io/address/0xB6bc2ff1aE7652B122C90562fEe604A1Eb8f09Dd#code)
 
 First, head over to the Etherscan page of the contract and copy the ABI content.
 

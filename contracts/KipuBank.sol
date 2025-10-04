@@ -61,10 +61,16 @@ interface IKipuBank {
     function getBalanceEther() external view returns (uint256 balance_);
 
     /**
-     * @notice Get balance in this contract in USD.
-     * @return balance_ The balance of this contract in USD.
+     * @notice Get balance in this contract in USDC.
+     * @return balance_ The balance of this contract in USDC.
      */
-    function getBalanceUsd() external view returns (uint256 balance_);
+    function getBalanceUsdc() external view returns (uint256 balance_);
+
+    /**
+     * @notice Get the total balance in this contract in USD.
+     * @return balance_ The total balance of this contract in USD.
+     */
+    function getTotalBalanceUsd() external view returns (uint256 balance_);
 
     /**
      * @notice Get balance for the sender for a given token.
@@ -321,9 +327,10 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount in USDC to deposit.
      */
     function depositUsdc(uint256 _amount) public payable override {
-        uint256 potentialBankValue = getBalanceUsd() + _convertEthToUsd(_amount, _getLatestPriceEthToUsd());
-        if (potentialBankValue > i_bankCap) {
-            revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, i_bankCap);
+        uint256 potentialBankValue = getBalanceUsdc() + _amount;
+        uint256 usdcBankCap = _convertEthToUsd(i_bankCap, _getLatestPriceEthToUsd());
+        if (potentialBankValue > usdcBankCap) {
+            revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, usdcBankCap);
         }
 
         _updateDepositValues(msg.sender, address(i_USDCToken), _amount);
@@ -370,9 +377,9 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount in USDC to withdraw.
      */
     function withdrawUsdc(uint256 _amount) public override nonReentrant {
-        uint256 maxSingleWithdrawLimitUsd = _convertEthToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
-        if (_amount > maxSingleWithdrawLimitUsd) {
-            revert WithdrawLimitExceededError(msg.sender, address(i_USDCToken), _amount, maxSingleWithdrawLimitUsd);
+        uint256 usdcMaxSingleWithdrawLimit = _convertEthToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
+        if (_amount > usdcMaxSingleWithdrawLimit) {
+            revert WithdrawLimitExceededError(msg.sender, address(i_USDCToken), _amount, usdcMaxSingleWithdrawLimit);
         }
 
         uint256 funds = s_vault[address(i_USDCToken)][msg.sender];
@@ -396,11 +403,19 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Get balance in this contract in USD.
-     * @return balance_ The balance of this contract in USD.
+     * @notice Get balance in this contract in USDC.
+     * @return balance_ The balance of this contract in USDC.
      */
-    function getBalanceUsd() public view override returns (uint256 balance_) {
-        balance_ = _convertEthToUsd(getBalanceEther(), _getLatestPriceEthToUsd());
+    function getBalanceUsdc() public view override returns (uint256 balance_) {
+        balance_ = i_USDCToken.balanceOf(address(this));
+    }
+
+    /**
+     * @notice Get the total balance in this contract in USD.
+     * @return balance_ The total balance of this contract in USD.
+     */
+    function getTotalBalanceUsd() public view override returns (uint256 balance_) {
+        balance_ = _convertEthToUsd(getBalanceEther(), _getLatestPriceEthToUsd()) + getBalanceUsdc();
     }
 
     /**
@@ -409,14 +424,14 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @dev Reverts with OracleStaleResponse if the response is stale.
      * @return price_ The latest price.
      */
-    function _getLatestPriceEthToUsd() internal view returns (uint256 price_) {
+    function _getLatestPriceEthToUsd() public view returns (uint256 price_) {
         (, int256 price, , uint256 updatedAt, ) = s_priceFeed.latestRoundData();
 
         if (price < 0) {
             revert OracleIncoherentResponse();
         }
 
-        if (updatedAt < block.timestamp - ORACLE_STALE_TIME_SECONDS) {
+        if (updatedAt + ORACLE_STALE_TIME_SECONDS < block.timestamp) {
             revert OracleStaleResponse();
         }
 

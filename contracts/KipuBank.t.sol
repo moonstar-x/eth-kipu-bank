@@ -2,32 +2,41 @@
 pragma solidity ^0.8.28;
 
 import { KipuBank } from "./KipuBank.sol";
+import { MockAggregatorV3 } from "./mocks/MockAggregatorV3.mock.sol";
+import { MockERC20 } from "./mocks/MockERC20.mock.sol";
 import { Test } from "forge-std/Test.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract KipuBankTest is Test {
     uint256 private constant BANK_CAP = 300;
     uint256 private constant MAX_SINGLE_WITHDRAW_LIMIT = 100;
     address private owner = address(this);
-    address private priceFeed = address(this);
-    address private constant ETH_ADDRESS = address(0);
-    IERC20 private constant USDC_TOKEN = IERC20(address(0));
 
-    KipuBank bank;
+    MockAggregatorV3 private mockedFeed = new MockAggregatorV3();
+    MockERC20 private mockedUsdcToken = new MockERC20();
+
+    address private constant ETH_ADDRESS = address(0);
+    address private usdcAddress = address(mockedUsdcToken);
+    int256 private constant ETH_FACTOR = 1e20;
+    int256 private constant MOCKED_ETH_PRICE = 2 * ETH_FACTOR;
+
+    KipuBank private bank;
 
     receive() external payable {}
 
     function setUp() public {
-        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, priceFeed, USDC_TOKEN);
+        mockedFeed.setLatestRoundData(MOCKED_ETH_PRICE, block.timestamp);
+        mockedUsdcToken.setBalance(address(this), 1000);
+
+        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, address(mockedFeed), mockedUsdcToken);
     }
 
     function test_ConstructorShouldRevertIfPreconditionsNotMet() public {
         vm.expectPartialRevert(KipuBank.ConstructorPreconditionError.selector);
-        bank = new KipuBank(50, 100, owner, priceFeed, USDC_TOKEN);
+        bank = new KipuBank(50, 100, owner, address(mockedFeed), mockedUsdcToken);
     }
 
-    function test_GetMyFundsShouldReturnUserFunds() public {
-        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 0, "My funds should initialized at 0.");
+    function test_GetMyFundsShouldReturnUserFundsInEth() public {
+        vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 0, "My funds should be initialized at 0.");
 
         bank.depositEther{ value: 10 }();
         vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 10, "My funds should be updated after deposit.");
@@ -36,14 +45,23 @@ contract KipuBankTest is Test {
         vm.assertEq(bank.getMyFunds(ETH_ADDRESS), 5, "My funds should be updated after withdraw.");
     }
 
-    // TODO: Test getMyFunds returns correct funds for USDC.
+    function test_GetMyFundsShouldReturnUserFundsInUsdc() public {
+        vm.assertEq(bank.getMyFunds(usdcAddress), 0, "My funds should be initialized at 0.");
 
-    // TODO: Test getFundsForAddress returns correct funds for ETH.
-    // TODO: Test getFundsForAddress returns correct funds for USDC.
+        bank.depositUsdc(10);
+        vm.assertEq(bank.getMyFunds(usdcAddress), 10, "My funds should be updated after deposit.");
 
-    // TODO: Test getDepositCount returns correct count.
+        bank.withdrawUsdc(5);
+        vm.assertEq(bank.getMyFunds(usdcAddress), 5, "My funds should be updated after withdraw.");
+    }
 
-    // TODO: Test getWithdrawCount returns correct count.
+    function test_GetDepositCountShouldStartAtZero() public {
+        vm.assertEq(bank.getDepositCount(), 0, "Deposit count should start at 0.");
+    }
+
+    function test_GetWithdrawCountShouldStartAtZero() public {
+        vm.assertEq(bank.getWithdrawCount(), 0, "Withdraw count should start at 0.");
+    }
 
     function test_DepositEtherShouldRevertIfBankCapReached() public {
         vm.expectPartialRevert(KipuBank.BankCapReachedError.selector);
@@ -72,10 +90,42 @@ contract KipuBankTest is Test {
         bank.depositEther{ value: 1 }();
     }
 
-    // TODO: Test depositUsdc should revert if bank cap reached.
-    // TODO: Test depositUsdc should update values.
-    // TODO: Test depositUsdc should transfer.
-    // TODO: Test depositUsdc should emit success.
+    function test_DepositUsdcShouldRevertIfBankCapReached() public {
+        vm.expectPartialRevert(KipuBank.BankCapReachedError.selector);
+        bank.depositUsdc((BANK_CAP + 1) * uint256(MOCKED_ETH_PRICE));
+    }
+
+    function test_DepositUsdcShouldUpdateValues() public {
+        address addr = address(this);
+        uint amount = 25;
+
+        vm.assertEq(bank.getFundsForAddress(addr, usdcAddress), 0, "Funds should start at 0.");
+        vm.assertEq(bank.getBalanceUsdc(), 0, "Bank should start at 0.");
+        vm.assertEq(bank.getDepositCount(), 0, "Deposit count should start at 0.");
+
+        bank.depositUsdc(amount);
+
+        vm.assertEq(bank.getFundsForAddress(addr, usdcAddress), amount, "Funds should be updated.");
+        vm.assertEq(bank.getBalanceUsdc(), amount, "Bank should be updated.");
+        vm.assertEq(bank.getDepositCount(), 1, "Deposit count be at 1.");
+    }
+
+    function test_DepositUsdcShouldTransfer() public {
+        address addr = address(this);
+        uint amount = 25;
+        uint initialBalance = mockedUsdcToken.balanceOf(addr);
+
+        bank.depositUsdc(amount);
+
+        vm.assertEq(mockedUsdcToken.balanceOf(addr), initialBalance - amount, "Funds should be updated.");
+    }
+
+    function test_DepositUsdcShouldEmitSuccess() public {
+        vm.expectEmit();
+        emit KipuBank.DepositSuccess(address(this), usdcAddress, 1);
+
+        bank.depositUsdc(1);
+    }
 
     function test_WithdrawEtherShouldRevertIfAmountExceedsLimit() public {
         vm.expectPartialRevert(KipuBank.WithdrawLimitExceededError.selector);
@@ -117,8 +167,6 @@ contract KipuBankTest is Test {
         bank.withdrawEther(5);
     }
 
-    // TODO: Test withdrawEther should revert if transfer fails.
-
     function test_WithdrawEtherShouldEmitSuccess() public {
         bank.depositEther{ value: 10 }();
 
@@ -128,13 +176,106 @@ contract KipuBankTest is Test {
         bank.withdrawEther(5);
     }
 
-    // TODO: Test withdrawUsdc should revert if amount exceeds limit.
-    // TODO: Test withdrawUsdc should revert if insufficient funds.
-    // TODO: Test withdrawUsdc should update values.
-    // TODO: Test withdrawUsdc should transfer.
-    // TODO: Test withdrawUsdc should emit success.
+    function test_WithdrawUsdcShouldRevertIfAmountExceedsLimit() public {
+        vm.expectPartialRevert(KipuBank.WithdrawLimitExceededError.selector);
+        bank.withdrawUsdc((MAX_SINGLE_WITHDRAW_LIMIT + 1) * uint256(MOCKED_ETH_PRICE));
+    }
 
-    // TODO: Test getBalanceEther should return correct balance.
+    function test_WithdrawUsdcShouldRevertIfAmountExceedsFunds() public {
+        vm.expectPartialRevert(KipuBank.InsufficientFundsError.selector);
+        bank.withdrawUsdc(10);
+    }
 
-    // TODO: Test getBalanceUsd should return correct balance.
+    function test_WithdrawUsdcShouldUpdateValues() public {
+        address addr = address(this);
+        uint initialAmount = 25;
+        uint withdrawnAmount = 10;
+
+        bank.depositUsdc(initialAmount);
+
+        vm.assertEq(bank.getFundsForAddress(addr, usdcAddress), initialAmount, "Funds should start at initial amount.");
+        vm.assertEq(bank.getBalanceUsdc(), initialAmount, "Bank should start at initial amount.");
+        vm.assertEq(bank.getWithdrawCount(), 0, "Withdraw count should start at 0.");
+
+        bank.withdrawUsdc(withdrawnAmount);
+
+        vm.assertEq(
+            bank.getFundsForAddress(addr, usdcAddress),
+            initialAmount - withdrawnAmount,
+            "Funds should be updated."
+        );
+        vm.assertEq(bank.getBalanceUsdc(), initialAmount - withdrawnAmount, "Bank should be updated.");
+        vm.assertEq(bank.getWithdrawCount(), 1, "Withdraw count should be at 1.");
+    }
+
+    function test_WithdrawUsdcShouldTransfer() public {
+        address addr = address(this);
+        uint amount = 25;
+        uint initialBalance = mockedUsdcToken.balanceOf(addr);
+
+        bank.depositUsdc(amount);
+        vm.assertEq(mockedUsdcToken.balanceOf(addr), initialBalance - amount, "Funds should be updated.");
+
+        bank.withdrawUsdc(amount);
+        vm.assertEq(mockedUsdcToken.balanceOf(addr), initialBalance, "Funds should be updated.");
+    }
+
+    function test_WithdrawUsdcShouldEmitSuccess() public {
+        bank.depositUsdc(10);
+        bank.withdrawUsdc(5);
+
+        vm.expectEmit();
+        emit KipuBank.WithdrawSuccess(address(this), usdcAddress, 5);
+
+        bank.withdrawUsdc(5);
+    }
+
+    function test_GetBalanceEtherShouldReturnInitialZero() public {
+        vm.assertEq(bank.getBalanceEther(), 0, "Initial bank balance should be 0.");
+    }
+
+    function test_GetBalanceEtherShouldReturnCorrectBalance() public {
+        bank.depositEther{ value: 10 }();
+        vm.assertEq(bank.getBalanceEther(), 10, "Bank balance should be updated after deposit.");
+    }
+
+    function test_GetBalanceUsdcShouldReturnInitialBalance() public {
+        uint256 initialBalance = mockedUsdcToken.balanceOf(address(bank));
+        vm.assertEq(
+            bank.getBalanceUsdc(),
+            initialBalance,
+            "Initial bank balance should be initial balance in ERC20 token."
+        );
+    }
+
+    function test_GetBalanceUsdcShouldReturnCorrectBalance() public {
+        uint256 initialBalance = mockedUsdcToken.balanceOf(address(bank));
+
+        bank.depositUsdc(10);
+        vm.assertEq(bank.getBalanceUsdc(), initialBalance + 10, "Bank balance should be updated after deposit.");
+    }
+
+    function test_GetTotalBalanceUsdShouldReturnInitialBalance() public {
+        uint256 initialUsdcBalance = mockedUsdcToken.balanceOf(address(bank));
+        vm.assertEq(
+            bank.getTotalBalanceUsd(),
+            initialUsdcBalance,
+            "Initial total balance should be initial USDC balance."
+        );
+    }
+
+    function test_GetTotalBalanceUsdShouldReturnCorrectBalance() public {
+        uint256 initialUsdcBalance = mockedUsdcToken.balanceOf(address(bank));
+        uint256 usdcAmount = 10;
+        uint256 ethAmount = 5;
+
+        bank.depositUsdc(usdcAmount);
+        bank.depositEther{ value: ethAmount }();
+
+        uint256 expectedUsdcBalance = initialUsdcBalance + usdcAmount;
+        uint256 expectedEthBalanceInUsd = (ethAmount * uint256(MOCKED_ETH_PRICE)) / uint256(ETH_FACTOR);
+        uint256 expectedBalance = expectedUsdcBalance + expectedEthBalanceInUsd;
+
+        vm.assertEq(bank.getTotalBalanceUsd(), expectedBalance, "Total balance should include both USDC and ETH.");
+    }
 }

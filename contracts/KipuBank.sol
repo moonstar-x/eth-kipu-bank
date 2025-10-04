@@ -7,8 +7,6 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-// TODO: Add @dev natspec comments to document when something reverts.
-
 /**
  * @title Kipu Bank Interface
  * @author Christian López (@moonstar-x)
@@ -23,23 +21,35 @@ interface IKipuBank {
 
     /**
      * @notice Deposits the value in the address' ETH vault.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Emits a DepositSuccess event upon success.
      */
     function depositEther() external payable;
 
     /**
      * @notice Deposits the value in the address' USDC vault.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
      */
     function depositUsdc(uint256 _amount) external payable;
 
     /**
      * @notice Withdraws amount from the address' ETH vault.
+     * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
+     * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
+     * @dev Reverts with TransferError if the transfer was not successful.
+     * @dev Emits a WithdrawSuccess event upon success.
      * @param _amount The amount to withdraw.
      */
     function withdrawEther(uint256 _amount) external;
 
     /**
      * @notice Withdraws the value in the address' USDC vault.
+     * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
+     * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
+     * @dev Reverts with TransferError if the transfer was not successful.
+     * @dev Emits a WithdrawSuccess event upon success.
      * @param _amount The amount in USDC to withdraw.
      */
     function withdrawUsdc(uint256 _amount) external;
@@ -291,6 +301,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Deposits the value in the address' ETH vault.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Emits a DepositSuccess event upon success.
      */
     function depositEther() public payable override {
         uint256 potentialBankValue = getBalanceEther() + msg.value;
@@ -304,6 +316,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Deposits the value in the address' USDC vault.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
      */
     function depositUsdc(uint256 _amount) public payable override {
@@ -320,6 +334,10 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Withdraws amount from the address' ETH vault.
+     * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
+     * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
+     * @dev Reverts with TransferError if the transfer was not successful.
+     * @dev Emits a WithdrawSuccess event upon success.
      * @param _amount The amount to withdraw.
      */
     function withdrawEther(uint256 _amount) public override nonReentrant {
@@ -345,6 +363,10 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Withdraws the value in the address' USDC vault.
+     * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
+     * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
+     * @dev Reverts with TransferError if the transfer was not successful.
+     * @dev Emits a WithdrawSuccess event upon success.
      * @param _amount The amount in USDC to withdraw.
      */
     function withdrawUsdc(uint256 _amount) public override nonReentrant {
@@ -383,6 +405,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Get the latest price from the Chainlink price feed.
+     * @dev Reverts with OracleIncoherentResponse if the response is incoherent.
+     * @dev Reverts with OracleStaleResponse if the response is stale.
      * @return price_ The latest price.
      */
     function _getLatestPriceEthToUsd() internal view returns (uint256 price_) {

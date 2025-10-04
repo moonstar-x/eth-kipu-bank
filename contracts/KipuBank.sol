@@ -33,7 +33,7 @@ interface IKipuBank {
      * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
      */
-    function depositUsdc(uint256 _amount) external payable;
+    function depositUsdc(uint256 _amount) external;
 
     /**
      * @notice Withdraws amount from the address' ETH vault.
@@ -124,11 +124,6 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     uint256 internal constant ORACLE_STALE_TIME_SECONDS = 3600;
 
     /**
-     * @notice The factor to convert ETH price to USD.
-     */
-    uint256 internal constant ETH_DECIMAL_FACTOR = 1e8;
-
-    /**
      * @notice The maximum value that this contract can hold.
      */
     uint256 private immutable i_bankCap;
@@ -169,7 +164,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _token The token address being deposited.
      * @param _amount The amount deposited.
      */
-    event DepositSuccess(address indexed _address, address indexed _token, uint256 indexed _amount);
+    event DepositSuccess(address indexed _address, address indexed _token, uint256 _amount);
 
     /**
      * @notice Event emitted when a withdraw is successful.
@@ -177,7 +172,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _token The token address being withdrawn.
      * @param _amount The amount withdrawn.
      */
-    event WithdrawSuccess(address indexed _address, address indexed _token, uint256 indexed _amount);
+    event WithdrawSuccess(address indexed _address, address indexed _token, uint256 _amount);
 
     /**
      * @notice Error thrown when the constructor preconditions are not met.
@@ -312,9 +307,9 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @dev Emits a DepositSuccess event upon success.
      */
     function depositEther() public payable override {
-        uint256 bankBalance = getBalanceEther();
-        if (bankBalance > i_bankCap) {
-            revert BankCapReachedError(msg.sender, ETH_ADDRESS, bankBalance, i_bankCap);
+        uint256 potentialBankValue = getBalanceEther() + msg.value;
+        if (potentialBankValue > i_bankCap) {
+            revert BankCapReachedError(msg.sender, ETH_ADDRESS, potentialBankValue, i_bankCap);
         }
 
         _updateDepositValues(msg.sender, ETH_ADDRESS, msg.value);
@@ -328,9 +323,9 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @dev Emits a DepositSuccess event upon success.
      * @param _amount The amount in USDC to deposit.
      */
-    function depositUsdc(uint256 _amount) public payable override {
+    function depositUsdc(uint256 _amount) public override {
         uint256 potentialBankValue = getBalanceUsdc() + _amount;
-        uint256 usdcBankCap = _convertEthToUsd(i_bankCap, _getLatestPriceEthToUsd());
+        uint256 usdcBankCap = _convertEthWeiToUsd(i_bankCap, _getLatestPriceEthToUsd());
         if (potentialBankValue > usdcBankCap) {
             revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, usdcBankCap);
         }
@@ -379,7 +374,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount in USDC to withdraw.
      */
     function withdrawUsdc(uint256 _amount) public override nonReentrant {
-        uint256 usdcMaxSingleWithdrawLimit = _convertEthToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
+        uint256 usdcMaxSingleWithdrawLimit = _convertEthWeiToUsd(i_maxSingleWithdrawLimit, _getLatestPriceEthToUsd());
         if (_amount > usdcMaxSingleWithdrawLimit) {
             revert WithdrawLimitExceededError(msg.sender, address(i_USDCToken), _amount, usdcMaxSingleWithdrawLimit);
         }
@@ -417,7 +412,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @return balance_ The total balance of this contract in USD.
      */
     function getTotalBalanceUsd() public view override returns (uint256 balance_) {
-        balance_ = _convertEthToUsd(getBalanceEther(), _getLatestPriceEthToUsd()) + getBalanceUsdc();
+        balance_ = _convertEthWeiToUsd(getBalanceEther(), _getLatestPriceEthToUsd()) + getBalanceUsdc();
     }
 
     /**
@@ -442,12 +437,12 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Converts an amount in ETH to USD.
-     * @param _amountEth The amount in ETH.
+     * @param _amountEthWei The amount in ETH (Wei).
      * @param _ethPrice The current price of ETH in USD.
      * @return amountUsd_ The equivalent amount in USD.
      */
-    function _convertEthToUsd(uint256 _amountEth, uint256 _ethPrice) internal pure returns (uint256 amountUsd_) {
-        amountUsd_ = (_amountEth * _ethPrice) / ETH_DECIMAL_FACTOR;
+    function _convertEthWeiToUsd(uint256 _amountEthWei, uint256 _ethPrice) internal pure returns (uint256 amountUsd_) {
+        amountUsd_ = (_amountEthWei * _ethPrice) / 1e20;
     }
 
     /**

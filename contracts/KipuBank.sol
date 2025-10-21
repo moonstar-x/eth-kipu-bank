@@ -56,6 +56,23 @@ interface IKipuBank {
     function depositArbitraryToken(address _tokenIn, uint128 _amount) external payable;
 
     /**
+     * @notice Swaps an input value.
+     * @dev Reverts with MultiTokenInputsNotSupported if the caller attempts to send ETH within this function.
+     * @dev Emits a SwapSuccess event if the swap is executed successfully.
+     * @param _key The PoolKey to execute this swap on.
+     * @param _amountIn The amount to swap.
+     * @param _minAmountOut The minimum amount to accept after a swap.
+     * @param _deadline The maximum time that an user is willing to wait for the swap to complete.
+     * @return amountOut_ The USDC amount actually deposited to the this contract.
+     */
+    function _swapExactInputSingle(
+        PoolKey memory _key,
+        uint128 _amountIn,
+        uint128 _minAmountOut,
+        uint48 _deadline
+    ) external payable returns (uint256 amountOut_);
+
+    /**
      * @notice Withdraws amount from the address' ETH vault.
      * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
      * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
@@ -177,6 +194,11 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice The permit interface to use when approving swaps.
      */
     IPermit2 private immutable i_permit2;
+
+    /**
+     * @notice The quoter interface to use when quoting swaps.
+     */
+    IV4Quoter private immutable i_quoter;
 
     /**
      * @notice The USD Coin (USDC) token contract address on the Ethereum network.
@@ -331,7 +353,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         address _priceFeed,
         IERC20 _usdcToken,
         address payable _router,
-        address _permit2
+        address _permit2,
+        address _quoter
     ) Ownable(_owner) {
         if (_bankCap < _maxWithdrawLimit) {
             revert ConstructorPreconditionError("Exp. bankCap >= maxWithdrawLimit");
@@ -343,6 +366,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         i_USDCToken = _usdcToken;
         i_router = IUniversalRouter(_router);
         i_permit2 = IPermit2(_permit2);
+        i_quoter = IV4Quoter(_quoter);
     }
 
     /**
@@ -439,11 +463,11 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amount The amount of the token to deposit.
      */
     function depositArbitraryToken(address _tokenIn, uint128 _amount) public payable override {
-        PoolKey key = PoolKey({
+        PoolKey memory key = PoolKey({
             currency0: Currency.wrap(_tokenIn),
             currency1: Currency.wrap(address(i_USDCToken)),
             fee: UNISWAP_POOL_FEE,
-            tickSpacing: UNISWAP_POOL_KEY_SPACING,
+            tickSpacing: UNISWAP_POOL_TICK_SPACING,
             hooks: IHooks(address(0))
         });
 
@@ -454,18 +478,74 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
             revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, usdcBankCap);
         }
 
-        _updateDepositValues(msg.sender, address(i_USDCToken), uint128);
+        _updateDepositValues(msg.sender, address(i_USDCToken), quotedUsdcAmount);
 
-        uint48 deadline = block.timestamp + UNISWAP_DEADLINE_FROM_NOW;
-        _swapExactInputSingle(key, _amount, quotedUsdcAmount, deadline);
+        uint48 deadline = uint48(block.timestamp + uint48(UNISWAP_DEADLINE_FROM_NOW));
+        _swapExactInputSingle(key, _amount, uint128(quotedUsdcAmount), deadline);
 
         emit ArbitraryDepositSuccess({
             _sender: msg.sender,
             _tokenIn: _tokenIn,
-            _amountIn: amount,
+            _amountIn: _amount,
             _tokenOut: address(i_USDCToken),
             _amountOut: quotedUsdcAmount
         });
+    }
+
+    /**
+     * @notice Swaps an input value.
+     * @dev Reverts with MultiTokenInputsNotSupported if the caller attempts to send ETH within this function.
+     * @dev Emits a SwapSuccess event if the swap is executed successfully.
+     * @param _key The PoolKey to execute this swap on.
+     * @param _amountIn The amount to swap.
+     * @param _minAmountOut The minimum amount to accept after a swap.
+     * @param _deadline The maximum time that an user is willing to wait for the swap to complete.
+     * @return amountOut_ The USDC amount actually deposited to the this contract.
+     */
+    function _swapExactInputSingle(
+        PoolKey memory _key,
+        uint128 _amountIn,
+        uint128 _minAmountOut,
+        uint48 _deadline
+    ) public override payable returns (uint256 amountOut_) {
+        if (msg.value > 0 && Currency.unwrap(_key.currency0) != ETH_ADDRESS) {
+            revert MultiTokenInputsNotSupported(msg.sender, Currency.unwrap(_key.currency0), _amountIn);
+        }
+        
+        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
+
+        bytes[] memory params = new bytes[](3);
+        params[0] = abi.encode(IV4Router.ExactInputSingleParams({
+            poolKey: _key,
+            zeroForOne: true,
+            amountIn: _amountIn,
+            amountOutMinimum: _minAmountOut,
+            hookData: bytes("")
+        }));
+        params[1] = abi.encode(_key.currency0, _amountIn);
+        params[2] = abi.encode(_key.currency1, _minAmountOut);
+
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(actions, params);
+
+        uint256 balanceBeforeSwap = i_USDCToken.balanceOf(address(this));
+
+        if (Currency.unwrap(_key.currency0) != ETH_ADDRESS) {
+            IERC20(Currency.unwrap(_key.currency0)).safeTransferFrom(msg.sender, address(this), _amountIn);
+            IERC20(Currency.unwrap(_key.currency0)).safeIncreaseAllowance(address(i_permit2), _amountIn);
+            i_permit2.approve(Currency.unwrap(_key.currency0), address(i_router), _amountIn, _deadline);
+        }
+
+        i_router.execute{value: _amountIn}(commands, inputs, _deadline);
+        emit SwapSuccess(msg.sender, Currency.unwrap(_key.currency0), _amountIn);
+
+        uint256 balanceAfterSwap = i_USDCToken.balanceOf(address(this));
+        amountOut_ = balanceAfterSwap - balanceBeforeSwap;
     }
 
     /**
@@ -548,67 +628,6 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Swaps an input value.
-     * @dev Reverts with MultiTokenInputsNotSupported if the caller attempts to send ETH within this function.
-     * @dev Emits a SwapSuccess event if the swap is executed successfully.
-     * @param _key The PoolKey to execute this swap on.
-     * @param _amountIn The amount to swap.
-     * @param _minAmountOut The minimum amount to accept after a swap.
-     * @param _deadline The maximum time that an user is willing to wait for the swap to complete.
-     * @return amountOut_ The USDC amount actually deposited to the this contract.
-     */
-    function _swapExactInputSingle(
-        PoolKey calldata _key,
-        uint128 _amountIn,
-        uint128 _minAmountOut,
-        uint48 _deadline
-    ) internal payable returns (uint256 amountOut_) {
-        address tokenIn = Currency.unwrap(_key.currency0);
-        uint256 balanceBeforeSwap = i_USDCToken.balanceOf(address(this));
-
-        if (msg.value > 0 && tokenIn != ETH_ADDRESS) {
-            revert MultiTokenInputsNotSupported(msg.sender, tokenIn, _amountIn);
-        }
-        
-        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
-
-        bytes[3] memory params = [
-            abi.encode(IV4Router.ExactInputSingleParams({
-                poolKey: _key,
-                zeroForOne: true,
-                amountIn: _amountIn,
-                amountOutMinimum: _minAmountOut,
-                hookData: bytes("")
-            })),
-            abi.encode(_key.currency0, _amountIn),
-            abi.encode(_key.currency1, _minAmountOut)
-        ];
-
-        bytes[1] memory inputs = [
-            abi.encode(actions, params)
-        ];
-
-        if (tokenInAddress != ETH_ADDRESS) {
-            IERC20 tokenIn = IERC20(tokenInAddress);
-
-            tokenIn.safeTransferFrom(msg.sender, address(this), _amountIn);
-            tokenIn.safeIncreaseAllowance(address(i_permit2), _amountIn);
-            i_permit2.approve(tokenInAddress, address(i_router), _amountIn, _deadline);
-        }
-
-        i_router.execute{value: _amountIn}(commands, inputs, _deadline);
-        emit SwapSuccess(msg.sender, tokenIn, _amountIn);
-
-        uint256 balanceAfterSwap = i_USDCToken.balanceOf(address(this));
-        amountOut_ = balanceAfterSwap - balanceBeforeSwap;
-    }
-
-    /**
      * @notice Get the latest price from the Chainlink price feed.
      * @dev Reverts with OracleIncoherentResponse if the response is incoherent.
      * @dev Reverts with OracleStaleResponse if the response is stale.
@@ -636,7 +655,7 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @param _amountIn The amount to quote.
      * @return amountOut_ The quoted value.
      */
-    function _quoteTokenToUSDC(PoolKey _key, uint128 _amountIn) internal view returns (uint256 amountOut_) {
+    function _quoteTokenToUSDC(PoolKey memory _key, uint128 _amountIn) internal view returns (uint256 amountOut_) {
         IV4Quoter.QuoteExactSingleParams memory params = IV4Quoter.QuoteExactSingleParams({
             poolKey: _key,
             zeroForOne: true,
@@ -644,8 +663,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
             hookData: bytes("")
         });
         
-        try IV4Quoter.quoteExactInputSingle(params) returns (uint256 amountOut_, uint256) {
-            return amountOut_;
+        try i_quoter.quoteExactInputSingle(params) returns (uint256 amountOut, uint256) {
+            amountOut_ = amountOut;
         } catch {
             revert UniswapQuoteFailed(msg.sender, Currency.unwrap(_key.currency0), _amountIn);
         }

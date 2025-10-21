@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
 import { KipuBank } from "./KipuBank.sol";
 import { MockAggregatorV3 } from "./mocks/MockAggregatorV3.mock.sol";
 import { MockERC20 } from "./mocks/MockERC20.mock.sol";
+import { MockUniversalRouter } from "./mocks/MockUniversalRouter.mock.sol";
+import { MockPermit2 } from "./mocks/MockPermit2.mock.sol";
 import { Test } from "forge-std/Test.sol";
 
 contract KipuBankTest is Test {
@@ -13,6 +15,8 @@ contract KipuBankTest is Test {
 
     MockAggregatorV3 private mockedFeed = new MockAggregatorV3();
     MockERC20 private mockedUsdcToken = new MockERC20();
+    MockUniversalRouter private mockedRouter = new MockUniversalRouter();
+    MockPermit2 private mockedPermit2 = new MockPermit2();
 
     address private constant ETH_ADDRESS = address(0);
     address private usdcAddress = address(mockedUsdcToken);
@@ -27,8 +31,15 @@ contract KipuBankTest is Test {
         mockedFeed.setLatestRoundData(MOCKED_ETH_PRICE, block.timestamp);
         mockedUsdcToken.setBalance(address(this), 1000);
 
-        // TODO: Update constructor.
-        bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, address(mockedFeed), mockedUsdcToken);
+        bank = new KipuBank({
+            _bankCap: BANK_CAP,
+            _maxWithdrawLimit: MAX_SINGLE_WITHDRAW_LIMIT,
+            _owner: owner,
+            _priceFeed: address(mockedFeed),
+            _usdcToken: mockedUsdcToken,
+            _router: address(mockedRouter),
+            _permit2: address(mockedPermit2)
+        });
     }
 
     function test_ConstructorShouldRevertIfPreconditionsNotMet() public {

@@ -6,6 +6,15 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { IPermit2 } from "@uniswap/permit2/src/interfaces/IPermit2.sol";
+import { IUniversalRouter } from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
+import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands.sol";
+import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { IV4Quoter } from "@uniswap/v4-periphery/src/interfaces/IV4Quoter.sol";
+import { IV4Router } from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
+import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 
 /**
  * @title Kipu Bank Interface
@@ -34,6 +43,17 @@ interface IKipuBank {
      * @param _amount The amount in USDC to deposit.
      */
     function depositUsdc(uint256 _amount) external;
+
+    /**
+     * @notice Deposits the value in the address' USDC vault by swapping from the source token.
+     * Bank cap is dynamically converted from ETH to USDC, assume that this value might fluctuate.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Emits a SwapSuccess event upon swapping the value.
+     * @dev Emits a DepositSuccess event upon success.
+     * @param _tokenIn The token to deposit.
+     * @param _amount The amount of the token to deposit.
+     */
+    function depositArbitraryToken(address _tokenIn, uint128 _amount) external payable;
 
     /**
      * @notice Withdraws amount from the address' ETH vault.
@@ -124,6 +144,21 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     uint256 internal constant ORACLE_STALE_TIME_SECONDS = 3600;
 
     /**
+     * @notice The fee to use for interacting with Uniswap pools.
+     */
+    uint24 internal constant UNISWAP_POOL_FEE = 3000;
+
+    /**
+     * @notice The tick spacing to use for interacting with Uniswap pools.
+     */
+    int24 internal constant UNISWAP_POOL_TICK_SPACING = 60;
+
+    /**
+     * @notice The time to wait from now to be used as a deadline for a swap.
+     */
+    int48 internal constant UNISWAP_DEADLINE_FROM_NOW = 30;
+
+    /**
      * @notice The maximum value that this contract can hold.
      */
     uint256 private immutable i_bankCap;
@@ -132,6 +167,16 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
      * @notice The maximum amount that a user can withdraw from their vault in a single transaction.
      */
     uint256 private immutable i_maxSingleWithdrawLimit;
+
+    /**
+     * @notice The Universal Router to interface with for swapping tokens.
+     */
+    IUniversalRouter private immutable i_router;
+
+    /**
+     * @notice The permit interface to use when approving swaps.
+     */
+    IPermit2 private immutable i_permit2;
 
     /**
      * @notice The USD Coin (USDC) token contract address on the Ethereum network.
@@ -160,19 +205,43 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
 
     /**
      * @notice Event emitted when a deposit is successful.
-     * @param _address The address of the message sender.
+     * @param _sender The address of the message sender.
      * @param _token The token address being deposited.
      * @param _amount The amount deposited.
      */
-    event DepositSuccess(address indexed _address, address indexed _token, uint256 _amount);
+    event DepositSuccess(address indexed _sender, address indexed _token, uint256 _amount);
+
+    /**
+     * @notice Event emitted when a deposit is successful.
+     * @param _sender The address of the message sender.
+     * @param _tokenIn The token address being deposited by the user (before swap).
+     * @param _amountIn The amount deposited before swap.
+     * @param _tokenOut The token address being deposited in the contract (after swap).
+     * @param _amountOut The amount deposited after swap.
+     */
+    event ArbitraryDepositSuccess(
+        address indexed _sender,
+        address indexed _tokenIn,
+        uint256 _amountIn,
+        address indexed _tokenOut,
+        uint256 _amountOut
+    );
 
     /**
      * @notice Event emitted when a withdraw is successful.
-     * @param _address The address of the message sender.
+     * @param _sender The address of the message sender.
      * @param _token The token address being withdrawn.
      * @param _amount The amount withdrawn.
      */
-    event WithdrawSuccess(address indexed _address, address indexed _token, uint256 _amount);
+    event WithdrawSuccess(address indexed _sender, address indexed _token, uint256 _amount);
+
+    /**
+     * @notice Event emitted when a token value has been swapped.
+     * @param _sender The address of the message sender.
+     * @param _token The token address being deposited.
+     * @param _amount The amount deposited.
+     */
+    event SwapSuccess(address indexed _sender, address indexed _token, uint256 _amount);
 
     /**
      * @notice Error thrown when the constructor preconditions are not met.
@@ -229,19 +298,40 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     error OracleIncoherentResponse();
 
     /**
+     * @notice Error thrown if the contract caller attempts to operate with more
+     * than one token at a time.
+     * @param _sender The address of the sender.
+     * @param _token The token address used.
+     * @param _amount The amount that was attempted to be swapped.
+     */
+    error MultiTokenInputsNotSupported(address _sender, address _token, uint256 _amount);
+
+    /**
+     * @notice Error thrown if an error occurred when requesting a quote with Uniswap.
+     * @param _sender The address of the sender.
+     * @param _token The token address used.
+     * @param _amount The amount that was attempted to be quoted.
+     */
+    error UniswapQuoteFailed(address _sender, address _token, uint256 _amount);
+
+    /**
      * @notice Deploys the contract by setting the bank cap and the maximum single withdrawal limit.
      * @param _bankCap The maximum value that this contract can hold.
      * @param _maxWithdrawLimit The maximum amount that a user can withdraw from their vault in a single transaction.
      * @param _owner The address of the owner of the contract.
      * @param _priceFeed The address of the Chainlink price feed contract for ETH/USD.
      * @param _usdcToken The address of the USD Coin (USDC) token contract on the Ethereum network.
+     * @param _router The address of the UniversalRouter contract.
+     * @param _permit2 The address of the Permit2 contract.
      */
     constructor(
         uint256 _bankCap,
         uint256 _maxWithdrawLimit,
         address _owner,
         address _priceFeed,
-        IERC20 _usdcToken
+        IERC20 _usdcToken,
+        address payable _router,
+        address _permit2
     ) Ownable(_owner) {
         if (_bankCap < _maxWithdrawLimit) {
             revert ConstructorPreconditionError("Exp. bankCap >= maxWithdrawLimit");
@@ -251,6 +341,8 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         i_maxSingleWithdrawLimit = _maxWithdrawLimit;
         s_priceFeed = AggregatorV3Interface(_priceFeed);
         i_USDCToken = _usdcToken;
+        i_router = IUniversalRouter(_router);
+        i_permit2 = IPermit2(_permit2);
     }
 
     /**
@@ -337,6 +429,46 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Deposits the value in the address' USDC vault by swapping from the source token.
+     * Bank cap is dynamically converted from ETH to USDC, assume that this value might fluctuate.
+     * @dev Reverts with BankCapReachedError if the deposit would exceed the bank cap.
+     * @dev Reverts with UniswapQuoteFailed if quote could not be acquired.
+     * @dev Emits a SwapSuccess event upon swapping the value.
+     * @dev Emits a ArbitraryDepositSuccess event upon success.
+     * @param _tokenIn The token to deposit.
+     * @param _amount The amount of the token to deposit.
+     */
+    function depositArbitraryToken(address _tokenIn, uint128 _amount) public payable override {
+        PoolKey key = PoolKey({
+            currency0: Currency.wrap(_tokenIn),
+            currency1: Currency.wrap(address(i_USDCToken)),
+            fee: UNISWAP_POOL_FEE,
+            tickSpacing: UNISWAP_POOL_KEY_SPACING,
+            hooks: IHooks(address(0))
+        });
+
+        uint256 quotedUsdcAmount = _quoteTokenToUSDC(key, _amount);
+        uint256 potentialBankValue = getBalanceUsdc() + quotedUsdcAmount;
+        uint256 usdcBankCap = _convertEthWeiToUsd(i_bankCap, _getLatestPriceEthToUsd());
+        if (potentialBankValue > usdcBankCap) {
+            revert BankCapReachedError(msg.sender, address(i_USDCToken), potentialBankValue, usdcBankCap);
+        }
+
+        _updateDepositValues(msg.sender, address(i_USDCToken), uint128);
+
+        uint48 deadline = block.timestamp + UNISWAP_DEADLINE_FROM_NOW;
+        _swapExactInputSingle(key, _amount, quotedUsdcAmount, deadline);
+
+        emit ArbitraryDepositSuccess({
+            _sender: msg.sender,
+            _tokenIn: _tokenIn,
+            _amountIn: amount,
+            _tokenOut: address(i_USDCToken),
+            _amountOut: quotedUsdcAmount
+        });
+    }
+
+    /**
      * @notice Withdraws amount from the address' ETH vault.
      * @dev Reverts with WithdrawLimitExceededError if the amount exceeds the single withdraw limit.
      * @dev Reverts with InsufficientFundsError if the withdraw would exceed the available balance.
@@ -416,6 +548,67 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Swaps an input value.
+     * @dev Reverts with MultiTokenInputsNotSupported if the caller attempts to send ETH within this function.
+     * @dev Emits a SwapSuccess event if the swap is executed successfully.
+     * @param _key The PoolKey to execute this swap on.
+     * @param _amountIn The amount to swap.
+     * @param _minAmountOut The minimum amount to accept after a swap.
+     * @param _deadline The maximum time that an user is willing to wait for the swap to complete.
+     * @return amountOut_ The USDC amount actually deposited to the this contract.
+     */
+    function _swapExactInputSingle(
+        PoolKey calldata _key,
+        uint128 _amountIn,
+        uint128 _minAmountOut,
+        uint48 _deadline
+    ) internal payable returns (uint256 amountOut_) {
+        address tokenIn = Currency.unwrap(_key.currency0);
+        uint256 balanceBeforeSwap = i_USDCToken.balanceOf(address(this));
+
+        if (msg.value > 0 && tokenIn != ETH_ADDRESS) {
+            revert MultiTokenInputsNotSupported(msg.sender, tokenIn, _amountIn);
+        }
+        
+        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
+
+        bytes[3] memory params = [
+            abi.encode(IV4Router.ExactInputSingleParams({
+                poolKey: _key,
+                zeroForOne: true,
+                amountIn: _amountIn,
+                amountOutMinimum: _minAmountOut,
+                hookData: bytes("")
+            })),
+            abi.encode(_key.currency0, _amountIn),
+            abi.encode(_key.currency1, _minAmountOut)
+        ];
+
+        bytes[1] memory inputs = [
+            abi.encode(actions, params)
+        ];
+
+        if (tokenInAddress != ETH_ADDRESS) {
+            IERC20 tokenIn = IERC20(tokenInAddress);
+
+            tokenIn.safeTransferFrom(msg.sender, address(this), _amountIn);
+            tokenIn.safeIncreaseAllowance(address(i_permit2), _amountIn);
+            i_permit2.approve(tokenInAddress, address(i_router), _amountIn, _deadline);
+        }
+
+        i_router.execute{value: _amountIn}(commands, inputs, _deadline);
+        emit SwapSuccess(msg.sender, tokenIn, _amountIn);
+
+        uint256 balanceAfterSwap = i_USDCToken.balanceOf(address(this));
+        amountOut_ = balanceAfterSwap - balanceBeforeSwap;
+    }
+
+    /**
      * @notice Get the latest price from the Chainlink price feed.
      * @dev Reverts with OracleIncoherentResponse if the response is incoherent.
      * @dev Reverts with OracleStaleResponse if the response is stale.
@@ -433,6 +626,29 @@ contract KipuBank is IKipuBank, ReentrancyGuard, Ownable {
         }
 
         price_ = uint256(price);
+    }
+
+    /**
+     * @notice Get a quote from a token to USDC (given the appropriate pool key).
+     * @dev Make sure to always use a PoolKey with USDC as the output.
+     * @dev Reverts with UniswapQuoteFailed if quote could not be acquired.
+     * @param _key The PoolKey to use to interact with Uniswap.
+     * @param _amountIn The amount to quote.
+     * @return amountOut_ The quoted value.
+     */
+    function _quoteTokenToUSDC(PoolKey _key, uint128 _amountIn) internal view returns (uint256 amountOut_) {
+        IV4Quoter.QuoteExactSingleParams memory params = IV4Quoter.QuoteExactSingleParams({
+            poolKey: _key,
+            zeroForOne: true,
+            exactAmount: _amountIn,
+            hookData: bytes("")
+        });
+        
+        try IV4Quoter.quoteExactInputSingle(params) returns (uint256 amountOut_, uint256) {
+            return amountOut_;
+        } catch {
+            revert UniswapQuoteFailed(msg.sender, Currency.unwrap(_key.currency0), _amountIn);
+        }
     }
 
     /**

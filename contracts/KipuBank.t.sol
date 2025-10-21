@@ -27,6 +27,7 @@ contract KipuBankTest is Test {
         mockedFeed.setLatestRoundData(MOCKED_ETH_PRICE, block.timestamp);
         mockedUsdcToken.setBalance(address(this), 1000);
 
+        // TODO: Update constructor.
         bank = new KipuBank(BANK_CAP, MAX_SINGLE_WITHDRAW_LIMIT, owner, address(mockedFeed), mockedUsdcToken);
     }
 
@@ -126,6 +127,13 @@ contract KipuBankTest is Test {
 
         bank.depositUsdc(1);
     }
+
+    // TODO: Test Deposit Arbitrary should revert if quote fails.
+    // TODO: Test Deposit Arbitrary should revert if bank cap is reached.
+    // TODO: Test Deposit Arbitrary should update values.
+    // TODO: Test Deposit Arbitrary should transfer.
+    // TODO: Test Deposit Arbitrary should emit swap success.
+    // TODO: Test Deposit Arbitrary should emit deposit success.
 
     function test_WithdrawEtherShouldRevertIfAmountExceedsLimit() public {
         vm.expectPartialRevert(KipuBank.WithdrawLimitExceededError.selector);
